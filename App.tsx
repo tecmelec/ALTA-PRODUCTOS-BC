@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Product, UserRole, AppSettings, ExternalProduct, Manufacturer, ItemCategory } from './types';
 import Modal from './components/Modal';
 import ProductForm from './components/ProductForm';
@@ -7,6 +7,7 @@ import Settings from './components/Settings';
 import ExternalProducts from './components/ExternalProducts';
 import ReferenceInspection from './components/ReferenceInspection';
 import { ITEM_CATEGORIES, MANUFACTURERS, UNITS_OF_MEASURE } from './constants';
+import { api, isApiConfigured } from './api';
 
 const DEFAULT_SETTINGS: AppSettings = {
   manufacturers: MANUFACTURERS,
@@ -20,9 +21,11 @@ const DEFAULT_SETTINGS: AppSettings = {
 };
 
 const App: React.FC = () => {
+  const apiConfigured = isApiConfigured();
   const [activeView, setActiveView] = useState<'products' | 'bc' | 'inspection' | 'settings'>('products');
   const [currentUser, setCurrentUser] = useState<UserRole>(UserRole.ADMIN);
   const [products, setProducts] = useState<Product[]>(() => {
+    if (apiConfigured) return [];
     const saved = localStorage.getItem('bc_products');
     return saved ? JSON.parse(saved) : [];
   });
@@ -35,23 +38,78 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
   });
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  // Carga inicial y refresco de datos compartidos desde el backend
+  const loadSharedData = useCallback(async () => {
+    if (!apiConfigured) return;
+    try {
+      setLoadError(null);
+      const [prods, manufacturers, categories] = await Promise.all([
+        api.getProducts(),
+        api.getManufacturers(),
+        api.getCategories(),
+      ]);
+      setProducts(prods);
+      setSettings(prev => ({
+        ...prev,
+        manufacturers: manufacturers.length > 0 ? manufacturers : prev.manufacturers,
+        categories: categories.length > 0 ? categories : prev.categories,
+      }));
+    } catch (err: any) {
+      setLoadError(err.message ?? 'Error cargando datos compartidos');
+    }
+  }, [apiConfigured]);
 
   useEffect(() => {
+    loadSharedData();
+  }, [loadSharedData]);
+
+  useEffect(() => {
+    if (apiConfigured) return; // en modo compartido, los productos viven en el backend
     localStorage.setItem('bc_products', JSON.stringify(products));
-  }, [products]);
+  }, [products, apiConfigured]);
 
   useEffect(() => {
     localStorage.setItem('bc_external_products', JSON.stringify(externalProducts));
   }, [externalProducts]);
 
   useEffect(() => {
+    if (apiConfigured) return; // fabricantes/categorías compartidas vienen del backend
     localStorage.setItem('bc_settings', JSON.stringify(settings));
-  }, [settings]);
+  }, [settings, apiConfigured]);
+
+  const handleSyncWithBC = async () => {
+    setIsSyncing(true);
+    try {
+      const result = await api.syncWithBusinessCentral();
+      await loadSharedData();
+      alert(
+        `Sincronización completada:\n${result.items} productos\n${result.manufacturers} fabricantes\n${result.categories} categorías`
+      );
+    } catch (err: any) {
+      alert(`Error al sincronizar con Business Central: ${err.message}`);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
 
   const userPerms = settings.permissions[currentUser];
 
-  const handleAddProduct = (newProduct: Product) => {
-    setProducts(prev => [newProduct, ...prev]);
+  const handleAddProduct = async (newProduct: Product) => {
+    if (apiConfigured) {
+      try {
+        await api.createProduct(newProduct);
+        await loadSharedData();
+      } catch (err: any) {
+        alert(`Error al guardar el producto: ${err.message}`);
+        return;
+      }
+    } else {
+      setProducts(prev => [newProduct, ...prev]);
+    }
     setIsModalOpen(false);
   };
 
@@ -129,16 +187,46 @@ const App: React.FC = () => {
             </nav>
           </div>
 
-          {activeView === 'products' && userPerms.canCreateProduct && (
-            <button
-              onClick={() => setIsModalOpen(true)}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-bold shadow-lg shadow-blue-200 flex items-center gap-2 transform active:scale-95 transition-all"
-            >
-              <span className="text-lg">+</span> Nuevo producto
-            </button>
+          {activeView === 'products' && (
+            <div className="flex items-center gap-3">
+              {apiConfigured && (
+                <button
+                  onClick={handleSyncWithBC}
+                  disabled={isSyncing}
+                  className="bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 disabled:opacity-50"
+                  title="Sincronizar productos, fabricantes y categorías desde Business Central"
+                >
+                  {isSyncing ? 'Sincronizando…' : '⟳ Sincronizar con BC'}
+                </button>
+              )}
+              {userPerms.canCreateProduct && (
+                <button
+                  onClick={() => setIsModalOpen(true)}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-bold shadow-lg shadow-blue-200 flex items-center gap-2 transform active:scale-95 transition-all"
+                >
+                  <span className="text-lg">+</span> Nuevo producto
+                </button>
+              )}
+            </div>
           )}
         </div>
       </header>
+
+      {apiConfigured && loadError && (
+        <div className="max-w-7xl mx-auto px-4 md:px-8 pt-4">
+          <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3">
+            No se pudieron cargar los datos compartidos: {loadError}
+          </div>
+        </div>
+      )}
+
+      {!apiConfigured && (
+        <div className="max-w-7xl mx-auto px-4 md:px-8 pt-4">
+          <div className="bg-amber-50 border border-amber-200 text-amber-700 text-sm rounded-lg px-4 py-3">
+            Modo local: esta instancia no está conectada al backend compartido ni a Business Central. Los datos solo se guardan en este navegador. Configura <code>VITE_API_BASE_URL</code> para activar la sincronización.
+          </div>
+        </div>
+      )}
 
       <main className="max-w-7xl mx-auto p-4 md:p-8">
         {activeView === 'products' && (
