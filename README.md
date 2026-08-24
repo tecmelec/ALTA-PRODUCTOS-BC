@@ -6,7 +6,7 @@ Aplicación web para el alta y gestión de productos, con datos **compartidos en
 - Frontend: React + Vite, desplegado en GitHub Pages.
 - Backend: Azure Functions (Node/TypeScript), guarda los datos compartidos en Azure Table Storage y se conecta a Business Central.
 
-## Arquitectura
+View your app in AI Studio: https://ai.studio/apps/27a86971-9c09-4e37-a11c-b811e8928709
 
 ```
 Navegador (todos los usuarios)

@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { Product, UserRole, AppSettings, ExternalProduct, Manufacturer, ItemCategory } from './types';
+import React, { useState, useEffect } from 'react';
+import { Product, UserRole, AppSettings, ExternalProduct, Manufacturer, ItemCategory, BCConfig } from './types';
 import Modal from './components/Modal';
 import ProductForm from './components/ProductForm';
 import Settings from './components/Settings';
@@ -8,6 +8,15 @@ import ExternalProducts from './components/ExternalProducts';
 import ReferenceInspection from './components/ReferenceInspection';
 import { ITEM_CATEGORIES, MANUFACTURERS, UNITS_OF_MEASURE } from './constants';
 import { api, isApiConfigured } from './api';
+
+const DEFAULT_BC_CONFIG: BCConfig = {
+  tenantId: '',
+  environment: 'production',
+  companyId: '',
+  clientId: '',
+  clientSecret: '',
+  isConnected: false
+};
 
 const DEFAULT_SETTINGS: AppSettings = {
   manufacturers: MANUFACTURERS,
@@ -17,7 +26,8 @@ const DEFAULT_SETTINGS: AppSettings = {
     [UserRole.ADMIN]: { canCreateProduct: true, canManageMasterData: true },
     [UserRole.TECNICO]: { canCreateProduct: true, canManageMasterData: false },
     [UserRole.COMPRAS]: { canCreateProduct: false, canManageMasterData: false },
-  }
+  },
+  bcConfig: DEFAULT_BC_CONFIG
 };
 
 const App: React.FC = () => {
@@ -35,7 +45,9 @@ const App: React.FC = () => {
   });
   const [settings, setSettings] = useState<AppSettings>(() => {
     const saved = localStorage.getItem('bc_settings');
-    return saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
+    const parsed = saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
+    if (!parsed.bcConfig) parsed.bcConfig = DEFAULT_BC_CONFIG;
+    return parsed;
   });
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -114,23 +126,17 @@ const App: React.FC = () => {
   };
 
   const handleBulkManufacturers = (newManufacturers: Manufacturer[]) => {
-    setSettings(prev => ({
-      ...prev,
-      manufacturers: newManufacturers
-    }));
+    setSettings(prev => ({ ...prev, manufacturers: newManufacturers }));
     alert(`${newManufacturers.length} fabricantes cargados correctamente.`);
   };
 
   const handleBulkCategories = (newCategories: ItemCategory[]) => {
-    setSettings(prev => ({
-      ...prev,
-      categories: newCategories
-    }));
+    setSettings(prev => ({ ...prev, categories: newCategories }));
     alert(`${newCategories.length} categorías cargadas correctamente.`);
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
+    <div className="min-h-screen bg-gray-50 pb-20 font-sans">
       <div className="bg-gray-800 text-white text-[10px] py-1 px-4 flex justify-between items-center uppercase tracking-widest font-bold">
         <span>SISTEMA DE GESTIÓN DE PRODUCTOS BC</span>
         <div className="flex items-center gap-3">
@@ -149,7 +155,7 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      <header className="bg-white border-b border-gray-200">
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 h-20 flex items-center justify-between">
           <div className="flex items-center gap-8">
             <div>
@@ -158,31 +164,11 @@ const App: React.FC = () => {
             </div>
             
             <nav className="flex gap-1 bg-gray-100 p-1 rounded-lg">
-              <button 
-                onClick={() => setActiveView('products')}
-                className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${activeView === 'products' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-              >
-                Productos
-              </button>
-              <button 
-                onClick={() => setActiveView('bc')}
-                className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${activeView === 'bc' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-              >
-                Productos BC
-              </button>
-              <button 
-                onClick={() => setActiveView('inspection')}
-                className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${activeView === 'inspection' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-              >
-                Inspección
-              </button>
+              <button onClick={() => setActiveView('products')} className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${activeView === 'products' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Productos</button>
+              <button onClick={() => setActiveView('bc')} className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${activeView === 'bc' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Productos BC</button>
+              <button onClick={() => setActiveView('inspection')} className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${activeView === 'inspection' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Inspección</button>
               {userPerms.canManageMasterData && (
-                <button 
-                  onClick={() => setActiveView('settings')}
-                  className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${activeView === 'settings' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                >
-                  Configuración
-                </button>
+                <button onClick={() => setActiveView('settings')} className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${activeView === 'settings' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Configuración</button>
               )}
             </nav>
           </div>
@@ -246,11 +232,7 @@ const App: React.FC = () => {
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {products.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="px-6 py-20 text-center text-gray-400">
-                          <p>No hay productos registrados.</p>
-                        </td>
-                      </tr>
+                      <tr><td colSpan={6} className="px-6 py-20 text-center text-gray-400">No hay productos registrados.</td></tr>
                     ) : (
                       products.map((p, idx) => (
                         <tr key={idx} className="hover:bg-blue-50/30 transition-colors">
@@ -282,30 +264,16 @@ const App: React.FC = () => {
             onUploadCategories={handleBulkCategories}
             onClearProducts={() => setExternalProducts([])}
             isAdmin={currentUser === UserRole.ADMIN}
+            bcConfig={settings.bcConfig}
           />
         )}
 
-        {activeView === 'inspection' && (
-          <ReferenceInspection 
-            products={products}
-            externalProducts={externalProducts}
-          />
-        )}
+        {activeView === 'inspection' && <ReferenceInspection products={products} externalProducts={externalProducts} />}
 
-        {activeView === 'settings' && (
-          <Settings 
-            settings={settings} 
-            onUpdateSettings={setSettings} 
-            currentRole={currentUser}
-          />
-        )}
+        {activeView === 'settings' && <Settings settings={settings} onUpdateSettings={setSettings} currentRole={currentUser} />}
       </main>
 
-      <Modal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        title="Alta de Producto"
-      >
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Alta de Producto">
         <ProductForm 
           onSave={handleAddProduct}
           onCancel={() => setIsModalOpen(false)}
