@@ -27,6 +27,15 @@ export interface ExternalProduct {
   description: string;
 }
 
+export interface BCConfig {
+  tenantId: string;
+  environment: string;
+  companyId: string;
+  clientId: string;
+  clientSecret: string;
+  isConnected: boolean;
+}
+
 export interface Product {
   no: string;
   description: string;
@@ -62,4 +71,5 @@ export interface AppSettings {
   categories: ItemCategory[];
   unitsOfMeasure: string[];
   permissions: Record<UserRole, RolePermissions>;
+  bcConfig?: BCConfig;
 }
