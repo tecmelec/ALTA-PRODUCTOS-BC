@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
-import { AppSettings, UserRole, Manufacturer, ItemCategory, BCConfig } from '../types';
+import { AppSettings, UserRole, Manufacturer, ItemCategory } from '../types';
+import { isApiConfigured } from '../api';
 
 interface SettingsProps {
   settings: AppSettings;
@@ -11,15 +12,7 @@ interface SettingsProps {
 const Settings: React.FC<SettingsProps> = ({ settings, onUpdateSettings, currentRole }) => {
   const [activeTab, setActiveTab] = useState<'manufacturers' | 'categories' | 'units' | 'roles' | 'api'>('manufacturers');
   const [newItem, setNewItem] = useState({ code: '', name: '', desc: '', unit: '' });
-  
-  const [bcForm, setBcForm] = useState<BCConfig>(settings.bcConfig || {
-    tenantId: '',
-    environment: 'production',
-    companyId: '',
-    clientId: '',
-    clientSecret: '',
-    isConnected: false
-  });
+  const apiConfigured = isApiConfigured();
 
   const isEditable = currentRole === UserRole.ADMIN;
 
@@ -50,11 +43,6 @@ const Settings: React.FC<SettingsProps> = ({ settings, onUpdateSettings, current
     if (type === 'category') newSettings.categories.splice(index, 1);
     if (type === 'unit') newSettings.unitsOfMeasure.splice(index, 1);
     onUpdateSettings(newSettings);
-  };
-
-  const saveBCConfig = () => {
-    onUpdateSettings({ ...settings, bcConfig: bcForm });
-    alert("Configuración de Business Central guardada correctamente.");
   };
 
   return (
@@ -106,71 +94,28 @@ const Settings: React.FC<SettingsProps> = ({ settings, onUpdateSettings, current
         {activeTab === 'api' && isEditable && (
           <div className="space-y-6">
             <div>
-              <h2 className="text-xl font-bold">Configuración de Business Central API</h2>
-              <p className="text-sm text-gray-500">Configura las credenciales de Azure AD para sincronizar directamente con la Tabla 27 (Item).</p>
+              <h2 className="text-xl font-bold">Conexión con Business Central</h2>
+              <p className="text-sm text-gray-500">
+                Por seguridad, las credenciales de Business Central (Tenant ID, Client ID y Client Secret)
+                no se guardan en este navegador. Se configuran directamente en el backend (Azure Function App),
+                que es el único que se comunica con Business Central.
+              </p>
             </div>
-            
-            <div className="grid grid-cols-1 gap-4 max-w-lg">
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-gray-500 uppercase">Tenant ID</label>
-                <input 
-                  type="text" 
-                  value={bcForm.tenantId} 
-                  onChange={e => setBcForm({...bcForm, tenantId: e.target.value})} 
-                  className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none" 
-                  placeholder="XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
-                />
+
+            <div className="max-w-lg space-y-4">
+              <div className={`flex items-center gap-2 px-4 py-3 rounded-lg border text-sm font-bold ${apiConfigured ? 'bg-green-50 text-green-700 border-green-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                {apiConfigured
+                  ? '● Backend compartido conectado — la sincronización con BC está disponible'
+                  : '○ Backend no configurado — esta instancia funciona en modo local, sin BC'}
               </div>
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-gray-500 uppercase">Ambiente (Environment)</label>
-                <select 
-                  value={bcForm.environment} 
-                  onChange={e => setBcForm({...bcForm, environment: e.target.value})} 
-                  className="w-full p-2 border border-gray-300 rounded"
-                >
-                  <option value="production">Production</option>
-                  <option value="Sandbox">Sandbox</option>
-                </select>
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-gray-500 uppercase">ID de Empresa (Company ID)</label>
-                <input 
-                  type="text" 
-                  value={bcForm.companyId} 
-                  onChange={e => setBcForm({...bcForm, companyId: e.target.value})} 
-                  className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none" 
-                  placeholder="ID de la empresa en Business Central"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-gray-500 uppercase">Client ID (Azure AD)</label>
-                <input 
-                  type="text" 
-                  value={bcForm.clientId} 
-                  onChange={e => setBcForm({...bcForm, clientId: e.target.value})} 
-                  className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none" 
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-gray-500 uppercase">Client Secret</label>
-                <input 
-                  type="password" 
-                  value={bcForm.clientSecret} 
-                  onChange={e => setBcForm({...bcForm, clientSecret: e.target.value})} 
-                  className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none" 
-                />
-              </div>
-              
-              <div className="pt-4 flex gap-3">
-                <button 
-                  onClick={saveBCConfig}
-                  className="bg-blue-600 text-white px-6 py-2 rounded font-bold shadow-lg hover:bg-blue-700 transition-all"
-                >
-                  Guardar Configuración
-                </button>
-                <div className={`flex items-center gap-2 px-3 py-1 rounded-full border text-xs font-bold ${bcForm.tenantId ? 'bg-green-50 text-green-700 border-green-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
-                   {bcForm.tenantId ? '● Configurado' : '○ Sin configurar'}
-                </div>
+
+              <div className="bg-gray-50 border border-gray-100 rounded-lg p-4 text-sm text-gray-600 space-y-2">
+                <p>Para conectar (o reconectar) con Business Central:</p>
+                <ol className="list-decimal list-inside space-y-1">
+                  <li>Configura las variables de entorno de BC en la Function App de Azure.</li>
+                  <li>Define <code className="bg-white px-1 rounded border">VITE_API_BASE_URL</code> apuntando a tu backend al desplegar la app.</li>
+                </ol>
+                <p>Consulta el README del proyecto para la guía completa paso a paso.</p>
               </div>
             </div>
           </div>

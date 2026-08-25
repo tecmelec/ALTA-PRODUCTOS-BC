@@ -29,3 +29,5 @@ backend/local.settings.json
 *.njsproj
 *.sln
 *.sw?
+product-master-bc-integration*.zip
+migrated_prompt_history/

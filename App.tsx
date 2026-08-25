@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Product, UserRole, AppSettings, ExternalProduct, Manufacturer, ItemCategory, BCConfig } from './types';
 import Modal from './components/Modal';
 import ProductForm from './components/ProductForm';
@@ -265,6 +265,9 @@ const App: React.FC = () => {
             onClearProducts={() => setExternalProducts([])}
             isAdmin={currentUser === UserRole.ADMIN}
             bcConfig={settings.bcConfig}
+            apiConfigured={apiConfigured}
+            isSyncing={isSyncing}
+            onSyncWithBC={handleSyncWithBC}
           />
         )}
 

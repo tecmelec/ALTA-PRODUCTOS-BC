@@ -10,6 +10,9 @@ interface ExternalProductsProps {
   onClearProducts: () => void;
   isAdmin: boolean;
   bcConfig?: BCConfig;
+  apiConfigured?: boolean;
+  isSyncing?: boolean;
+  onSyncWithBC?: () => void | Promise<void>;
 }
 
 const ExternalProducts: React.FC<ExternalProductsProps> = ({ 
@@ -19,14 +22,18 @@ const ExternalProducts: React.FC<ExternalProductsProps> = ({
   onUploadCategories,
   onClearProducts,
   isAdmin,
-  bcConfig
+  bcConfig,
+  apiConfigured,
+  isSyncing: isSyncingProp,
+  onSyncWithBC
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mfgInputRef = useRef<HTMLInputElement>(null);
   const catInputRef = useRef<HTMLInputElement>(null);
   
   const [isDragging, setIsDragging] = useState<string | null>(null);
-  const [isSyncing, setIsSyncing] = useState(false);
+  const [isSyncingLocal, setIsSyncingLocal] = useState(false);
+  const isSyncing = apiConfigured ? Boolean(isSyncingProp) : isSyncingLocal;
 
   const processFile = (file: File, type: 'products' | 'manufacturers' | 'categories') => {
     const reader = new FileReader();
@@ -61,50 +68,18 @@ const ExternalProducts: React.FC<ExternalProductsProps> = ({
   };
 
   const syncWithBC = async () => {
-    if (!bcConfig || !bcConfig.tenantId) {
-      alert("Por favor, configura las credenciales de Business Central en la sección de Ajustes.");
+    // Modo seguro: la sincronización real pasa por el backend (Azure Functions),
+    // que es el único que conoce las credenciales de Business Central.
+    if (apiConfigured && onSyncWithBC) {
+      await onSyncWithBC();
       return;
     }
 
-    setIsSyncing(true);
-    try {
-      // Estructura de la URL de la API de BC v2.0
-      // GET https://api.businesscentral.dynamics.com/v2.0/{tenantId}/{environment}/api/v2.0/companies({companyId})/items
-      
-      const baseUrl = `https://api.businesscentral.dynamics.com/v2.0/${bcConfig.tenantId}/${bcConfig.environment}/api/v2.0/companies(${bcConfig.companyId})`;
-      const itemsUrl = `${baseUrl}/items`;
-
-      // NOTA: En un entorno real, aquí se gestionaría el flujo OAuth2 para obtener el token.
-      // Para este ejemplo, simulamos la llamada con un mensaje explicativo si no hay token real disponible.
-      
-      console.log(`Intentando conectar a: ${itemsUrl}`);
-      
-      // Simulamos latencia de red
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      // Simulamos datos para demostración si no se puede realizar la petición real
-      // En producción, aquí iría: const response = await fetch(itemsUrl, { headers: { 'Authorization': `Bearer ${token}` } });
-      const mockData = [
-        { number: '1000', displayName: 'BICICLETA CARRETERA' },
-        { number: '1100', displayName: 'RUEDA DELANTERA' },
-        { number: '1110', displayName: 'LLANTA 28 PULGADAS' },
-        { number: 'SCH0001', displayName: 'INTERRUPTOR DIFERENCIAL ACTI9 IID REF. A9R61240' }
-      ];
-
-      const mapped: ExternalProduct[] = mockData.map(item => ({
-        no: item.number,
-        description: item.displayName.toUpperCase()
-      }));
-
-      onUploadProducts(mapped);
-      alert(`Sincronización finalizada: ${mapped.length} productos descargados desde Business Central.`);
-      
-    } catch (error) {
-      console.error("Error al sincronizar con BC:", error);
-      alert("Error al conectar con la API de Business Central. Verifique su conexión y credenciales.");
-    } finally {
-      setIsSyncing(false);
-    }
+    alert(
+      "La sincronización con Business Central no está disponible en este modo local.\n\n" +
+      "Por seguridad, las credenciales de Business Central nunca se guardan en el navegador. " +
+      "Contacta con tu administrador para configurar el backend compartido (ver README del proyecto)."
+    );
   };
 
   const UploadCard = ({ 
