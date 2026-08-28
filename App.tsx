@@ -115,15 +115,19 @@ const App: React.FC = () => {
     }
   };
 
-  const handleFullSync = async () => {
+  const handleFullSync = async (full: boolean) => {
     setIsFullSyncing(true);
     setFullSyncProgress(0);
     try {
-      const total = await api.syncAllProducts((count) => setFullSyncProgress(count));
+      const total = await api.syncAllProducts((count) => setFullSyncProgress(count), full);
       await loadSharedData(searchTerm);
-      alert(`Sincronización completa: ${total} artículos actualizados desde Business Central.`);
+      alert(
+        full
+          ? `Sincronización completa: ${total} artículos actualizados desde Business Central.`
+          : `Sincronización de cambios: ${total} artículos actualizados desde Business Central.`
+      );
     } catch (err: any) {
-      alert(`Error al sincronizar el catálogo completo: ${err.message}`);
+      alert(`Error al sincronizar con Business Central: ${err.message}`);
     } finally {
       setIsFullSyncing(false);
     }
@@ -260,14 +264,24 @@ const App: React.FC = () => {
                   className="w-full sm:w-80 px-4 py-2.5 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                 />
                 {currentUser === UserRole.ADMIN && (
-                  <button
-                    onClick={handleFullSync}
-                    disabled={isFullSyncing}
-                    className="text-xs font-bold text-gray-500 hover:text-gray-700 flex items-center gap-2 disabled:opacity-50"
-                    title="Descarga todo el catálogo de Business Central hacia la réplica de búsqueda (Supabase)"
-                  >
-                    {isFullSyncing ? `Sincronizando catálogo completo… (${fullSyncProgress})` : '⇩ Sincronizar catálogo completo'}
-                  </button>
+                  <div className="flex items-center gap-3 text-xs">
+                    <button
+                      onClick={() => handleFullSync(false)}
+                      disabled={isFullSyncing}
+                      className="font-bold text-gray-500 hover:text-gray-700 flex items-center gap-2 disabled:opacity-50"
+                      title="Trae solo los artículos modificados en Business Central desde la última sincronización"
+                    >
+                      {isFullSyncing ? `Sincronizando… (${fullSyncProgress})` : '⇩ Sincronizar cambios de BC'}
+                    </button>
+                    <button
+                      onClick={() => handleFullSync(true)}
+                      disabled={isFullSyncing}
+                      className="text-gray-400 hover:text-gray-600 underline disabled:opacity-50"
+                      title="Vuelve a descargar todo el catálogo desde cero (más lento, úsalo si algo no cuadra)"
+                    >
+                      forzar completa
+                    </button>
+                  </div>
                 )}
               </div>
             )}

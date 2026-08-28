@@ -32,3 +32,14 @@ create index if not exists idx_products_category
 -- Esta tabla la gestiona únicamente el backend (con la Service Role Key),
 -- así que no hace falta activar políticas RLS de acceso público.
 alter table products enable row level security;
+
+-- Guarda cuándo fue la última sincronización, para poder hacer
+-- sincronizaciones incrementales (solo lo que cambió desde entonces).
+create table if not exists sync_meta (
+  id text primary key default 'products',
+  last_cutoff date
+);
+
+insert into sync_meta (id, last_cutoff)
+values ('products', null)
+on conflict (id) do nothing;

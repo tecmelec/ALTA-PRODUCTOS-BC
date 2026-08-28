@@ -88,25 +88,25 @@ export const api = {
 
   /**
    * Sincroniza un lote de artículos desde Business Central hacia Supabase.
-   * Como el catálogo completo puede tardar más de lo que permite una sola
-   * petición, se llama repetidas veces con el `skip` devuelto hasta `done: true`.
+   * Por defecto es incremental (solo lo que cambió); pasa `full: true` para
+   * forzar una sincronización completa desde cero.
    */
-  async syncProductsBatch(skip: number): Promise<{ done: boolean; nextSkip: number; syncedThisRun: number }> {
+  async syncProductsBatch(skip: number, full = false): Promise<{ done: boolean; nextSkip: number; syncedThisRun: number; incremental: boolean }> {
     const res = await fetch(apiUrl('/api/sync-products'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ skip }),
+      body: JSON.stringify({ skip, full }),
     });
     return handle(res);
   },
 
-  /** Sincroniza el catálogo completo, llamando a syncProductsBatch en bucle. */
-  async syncAllProducts(onProgress?: (totalSynced: number) => void): Promise<number> {
+  /** Sincroniza el catálogo, llamando a syncProductsBatch en bucle hasta terminar. */
+  async syncAllProducts(onProgress?: (totalSynced: number) => void, full = false): Promise<number> {
     let skip = 0;
     let total = 0;
     // Límite de seguridad para no quedarnos en un bucle infinito ante un error inesperado.
     for (let i = 0; i < 200; i++) {
-      const result = await api.syncProductsBatch(skip);
+      const result = await api.syncProductsBatch(skip, full);
       total += result.syncedThisRun;
       skip = result.nextSkip;
       onProgress?.(total);
