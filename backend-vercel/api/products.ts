@@ -40,6 +40,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const items = await fetchODataEntities(itemsUrl, query);
+
+      // Modo depuración temporal: ?raw=1 devuelve los campos tal cual los da BC,
+      // sin mapear, para poder ver los nombres reales de la página personalizada.
+      if (req.query.raw) {
+        return res.status(200).json(items);
+      }
+
       return res.status(200).json(items.map(mapBcItemToProduct));
     }
 
