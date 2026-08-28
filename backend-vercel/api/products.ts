@@ -6,14 +6,14 @@ function mapBcItemToProduct(item: any) {
   return {
     no: item.No,
     description: item.Description ?? '',
-    baseUnitOfMeasure: item.BaseUnitOfMeasure ?? '',
-    inventoryPostingGroup: item.InventoryPostingGroup ?? '',
-    unitPrice: item.UnitPrice ?? 0,
-    unitCost: item.UnitCost ?? 0,
-    genProdPostingGroup: item.GenProdPostingGroup ?? '',
-    vatProdPostingGroup: item.VATProdPostingGroup ?? '',
-    manufacturerCode: item.ManufacturerCode ?? '',
-    itemCategoryCode: item.ItemCategoryCode ?? '',
+    baseUnitOfMeasure: item.Base_Unit_of_Measure ?? '',
+    inventoryPostingGroup: item.Inventory_Posting_Group ?? '',
+    unitPrice: item.Unit_Price ?? 0,
+    unitCost: item.Unit_Cost ?? 0,
+    genProdPostingGroup: item.Gen_Prod_Posting_Group ?? '',
+    vatProdPostingGroup: item.VAT_Prod_Posting_Group ?? '',
+    manufacturerCode: item.Manufacturer_Code ?? '',
+    itemCategoryCode: item.Item_Category_Code ?? '',
   };
 }
 
@@ -84,14 +84,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const payload: Record<string, any> = {
           No: no,
           Description: body.description,
-          ItemCategoryCode: body.itemCategoryCode,
-          ...(body.baseUnitOfMeasure ? { BaseUnitOfMeasure: body.baseUnitOfMeasure } : {}),
-          ...(body.unitPrice !== undefined ? { UnitPrice: body.unitPrice } : {}),
-          ...(body.unitCost !== undefined ? { UnitCost: body.unitCost } : {}),
-          ...(body.inventoryPostingGroup ? { InventoryPostingGroup: body.inventoryPostingGroup } : {}),
-          ...(body.genProdPostingGroup ? { GenProdPostingGroup: body.genProdPostingGroup } : {}),
-          ...(body.vatProdPostingGroup ? { VATProdPostingGroup: body.vatProdPostingGroup } : {}),
-          ...(!body.isGeneric ? { ManufacturerCode: body.manufacturerCode } : {}),
+          Item_Category_Code: body.itemCategoryCode,
+          ...(body.baseUnitOfMeasure ? { Base_Unit_of_Measure: body.baseUnitOfMeasure } : {}),
+          ...(body.unitPrice !== undefined ? { Unit_Price: body.unitPrice } : {}),
+          ...(body.unitCost !== undefined ? { Unit_Cost: body.unitCost } : {}),
+          ...(body.inventoryPostingGroup ? { Inventory_Posting_Group: body.inventoryPostingGroup } : {}),
+          ...(body.genProdPostingGroup ? { Gen_Prod_Posting_Group: body.genProdPostingGroup } : {}),
+          ...(body.vatProdPostingGroup ? { VAT_Prod_Posting_Group: body.vatProdPostingGroup } : {}),
+          ...(!body.isGeneric ? { Manufacturer_Code: body.manufacturerCode } : {}),
         };
 
         try {
