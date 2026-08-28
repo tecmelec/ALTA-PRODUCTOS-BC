@@ -12,12 +12,10 @@ dist
 dist-ssr
 *.local
 
-# Azure Functions
-backend/dist
-backend/bin
-backend/obj
-backend/.azure
-backend/local.settings.json
+# Vercel
+backend-vercel/.vercel
+backend-vercel/.env
+backend-vercel/.env.local
 
 # Editor directories and files
 .vscode/*

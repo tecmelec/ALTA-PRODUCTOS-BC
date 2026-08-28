@@ -1,7 +1,7 @@
-import { Product, Manufacturer, ItemCategory } from './types';
+import { Product, ProductType, Manufacturer, ItemCategory } from './types';
 
-// URL del backend (Azure Functions). Se inyecta en build time mediante
-// la variable de entorno VITE_API_BASE_URL (ver .env.local / GitHub Actions secret).
+// URL del backend (funciones serverless en Vercel). Se inyecta en build time
+// mediante la variable de entorno VITE_API_BASE_URL.
 const API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || '';
 
 function apiUrl(path: string): string {
@@ -15,39 +15,60 @@ function apiUrl(path: string): string {
 
 async function handle<T>(res: Response): Promise<T> {
   if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Error ${res.status}: ${text || res.statusText}`);
+    let message = res.statusText;
+    try {
+      const body = await res.json();
+      message = body.error ?? message;
+    } catch {
+      /* la respuesta no era JSON */
+    }
+    throw new Error(message);
   }
   return res.json() as Promise<T>;
 }
 
+export interface CreateProductInput {
+  description: string;
+  itemCategoryCode: string;
+  manufacturerCode?: string;
+  baseUnitOfMeasure?: string;
+  unitPrice?: number;
+  unitCost?: number;
+  inventoryPostingGroup?: string;
+  genProdPostingGroup?: string;
+  vatProdPostingGroup?: string;
+}
+
 export const api = {
+  /** Lee los productos directamente desde Business Central (fuente de verdad). */
   async getProducts(): Promise<Product[]> {
     const res = await fetch(apiUrl('/api/products'));
     return handle<Product[]>(res);
   },
 
-  async createProduct(product: Product): Promise<Product> {
+  /**
+   * Crea un producto en Business Central. El backend calcula el número
+   * correlativo (por fabricante o por categoría si es genérico) y lo crea
+   * directamente en BC.
+   */
+  async createProduct(input: CreateProductInput & { type: ProductType }): Promise<Product> {
     const res = await fetch(apiUrl('/api/products'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(product),
+      body: JSON.stringify({
+        isGeneric: input.type === ProductType.GENERICO,
+        manufacturerCode: input.manufacturerCode,
+        itemCategoryCode: input.itemCategoryCode,
+        description: input.description,
+        baseUnitOfMeasure: input.baseUnitOfMeasure,
+        unitPrice: input.unitPrice,
+        unitCost: input.unitCost,
+        inventoryPostingGroup: input.inventoryPostingGroup,
+        genProdPostingGroup: input.genProdPostingGroup,
+        vatProdPostingGroup: input.vatProdPostingGroup,
+      }),
     });
     return handle<Product>(res);
-  },
-
-  async updateProduct(no: string, product: Product): Promise<Product> {
-    const res = await fetch(apiUrl(`/api/products/${encodeURIComponent(no)}`), {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(product),
-    });
-    return handle<Product>(res);
-  },
-
-  async deleteProduct(no: string): Promise<void> {
-    const res = await fetch(apiUrl(`/api/products/${encodeURIComponent(no)}`), { method: 'DELETE' });
-    await handle(res);
   },
 
   async getManufacturers(): Promise<Manufacturer[]> {
@@ -58,11 +79,6 @@ export const api = {
   async getCategories(): Promise<ItemCategory[]> {
     const res = await fetch(apiUrl('/api/categories'));
     return handle<ItemCategory[]>(res);
-  },
-
-  async syncWithBusinessCentral(): Promise<{ ok: boolean; items: number; manufacturers: number; categories: number }> {
-    const res = await fetch(apiUrl('/api/sync'), { method: 'POST' });
-    return handle(res);
   },
 };
 

@@ -97,7 +97,7 @@ const Settings: React.FC<SettingsProps> = ({ settings, onUpdateSettings, current
               <h2 className="text-xl font-bold">Conexión con Business Central</h2>
               <p className="text-sm text-gray-500">
                 Por seguridad, las credenciales de Business Central (Tenant ID, Client ID y Client Secret)
-                no se guardan en este navegador. Se configuran directamente en el backend (Azure Function App),
+                no se guardan en este navegador. Se configuran directamente en el backend (funciones serverless en Vercel),
                 que es el único que se comunica con Business Central.
               </p>
             </div>
@@ -112,7 +112,7 @@ const Settings: React.FC<SettingsProps> = ({ settings, onUpdateSettings, current
               <div className="bg-gray-50 border border-gray-100 rounded-lg p-4 text-sm text-gray-600 space-y-2">
                 <p>Para conectar (o reconectar) con Business Central:</p>
                 <ol className="list-decimal list-inside space-y-1">
-                  <li>Configura las variables de entorno de BC en la Function App de Azure.</li>
+                  <li>Configura las variables de entorno de BC en el proyecto de Vercel del backend.</li>
                   <li>Define <code className="bg-white px-1 rounded border">VITE_API_BASE_URL</code> apuntando a tu backend al desplegar la app.</li>
                 </ol>
                 <p>Consulta el README del proyecto para la guía completa paso a paso.</p>

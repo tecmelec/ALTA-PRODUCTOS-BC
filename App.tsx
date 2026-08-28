@@ -53,7 +53,7 @@ const App: React.FC = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  // Carga inicial y refresco de datos compartidos desde el backend
+  // Carga inicial y refresco de datos compartidos (en vivo desde Business Central)
   const loadSharedData = useCallback(async () => {
     if (!apiConfigured) return;
     try {
@@ -70,7 +70,7 @@ const App: React.FC = () => {
         categories: categories.length > 0 ? categories : prev.categories,
       }));
     } catch (err: any) {
-      setLoadError(err.message ?? 'Error cargando datos compartidos');
+      setLoadError(err.message ?? 'Error cargando datos desde Business Central');
     }
   }, [apiConfigured]);
 
@@ -79,7 +79,7 @@ const App: React.FC = () => {
   }, [loadSharedData]);
 
   useEffect(() => {
-    if (apiConfigured) return; // en modo compartido, los productos viven en el backend
+    if (apiConfigured) return; // en modo conectado, los productos viven en Business Central
     localStorage.setItem('bc_products', JSON.stringify(products));
   }, [products, apiConfigured]);
 
@@ -88,20 +88,14 @@ const App: React.FC = () => {
   }, [externalProducts]);
 
   useEffect(() => {
-    if (apiConfigured) return; // fabricantes/categorías compartidas vienen del backend
+    if (apiConfigured) return; // fabricantes/categorías compartidas vienen de BC
     localStorage.setItem('bc_settings', JSON.stringify(settings));
   }, [settings, apiConfigured]);
 
-  const handleSyncWithBC = async () => {
+  const handleRefresh = async () => {
     setIsSyncing(true);
     try {
-      const result = await api.syncWithBusinessCentral();
       await loadSharedData();
-      alert(
-        `Sincronización completada:\n${result.items} productos\n${result.manufacturers} fabricantes\n${result.categories} categorías`
-      );
-    } catch (err: any) {
-      alert(`Error al sincronizar con Business Central: ${err.message}`);
     } finally {
       setIsSyncing(false);
     }
@@ -113,10 +107,21 @@ const App: React.FC = () => {
   const handleAddProduct = async (newProduct: Product) => {
     if (apiConfigured) {
       try {
-        await api.createProduct(newProduct);
+        await api.createProduct({
+          type: newProduct.type,
+          description: newProduct.description,
+          itemCategoryCode: newProduct.itemCategoryCode,
+          manufacturerCode: newProduct.manufacturerCode,
+          baseUnitOfMeasure: newProduct.baseUnitOfMeasure,
+          unitPrice: newProduct.unitPrice,
+          unitCost: newProduct.unitCost,
+          inventoryPostingGroup: newProduct.inventoryPostingGroup,
+          genProdPostingGroup: newProduct.genProdPostingGroup,
+          vatProdPostingGroup: newProduct.vatProdPostingGroup,
+        });
         await loadSharedData();
       } catch (err: any) {
-        alert(`Error al guardar el producto: ${err.message}`);
+        alert(`Error al crear el producto en Business Central: ${err.message}`);
         return;
       }
     } else {
@@ -177,12 +182,12 @@ const App: React.FC = () => {
             <div className="flex items-center gap-3">
               {apiConfigured && (
                 <button
-                  onClick={handleSyncWithBC}
+                  onClick={handleRefresh}
                   disabled={isSyncing}
                   className="bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 disabled:opacity-50"
-                  title="Sincronizar productos, fabricantes y categorías desde Business Central"
+                  title="Recargar productos, fabricantes y categorías desde Business Central"
                 >
-                  {isSyncing ? 'Sincronizando…' : '⟳ Sincronizar con BC'}
+                  {isSyncing ? 'Actualizando…' : '⟳ Actualizar desde BC'}
                 </button>
               )}
               {userPerms.canCreateProduct && (
@@ -209,7 +214,7 @@ const App: React.FC = () => {
       {!apiConfigured && (
         <div className="max-w-7xl mx-auto px-4 md:px-8 pt-4">
           <div className="bg-amber-50 border border-amber-200 text-amber-700 text-sm rounded-lg px-4 py-3">
-            Modo local: esta instancia no está conectada al backend compartido ni a Business Central. Los datos solo se guardan en este navegador. Configura <code>VITE_API_BASE_URL</code> para activar la sincronización.
+            Modo local: esta instancia no está conectada a Business Central. Los datos solo se guardan en este navegador y no se comparten con otros usuarios. Configura <code>VITE_API_BASE_URL</code> apuntando al backend para activar el alta directa en BC.
           </div>
         </div>
       )}
@@ -267,7 +272,7 @@ const App: React.FC = () => {
             bcConfig={settings.bcConfig}
             apiConfigured={apiConfigured}
             isSyncing={isSyncing}
-            onSyncWithBC={handleSyncWithBC}
+            onSyncWithBC={handleRefresh}
           />
         )}
 

@@ -131,28 +131,34 @@ const ExternalProducts: React.FC<ExternalProductsProps> = ({
         <div className="flex justify-between items-center">
           <div>
             <h2 className="text-xl font-bold text-gray-800">Maestro Externo (Business Central)</h2>
-            <p className="text-sm text-gray-500">Sincronización de números correlativos con la Tabla 27 (Item).</p>
+            <p className="text-sm text-gray-500">
+              {apiConfigured
+                ? 'Los productos, fabricantes y categorías ya se leen en vivo desde Business Central. Usa esto solo como respaldo manual.'
+                : 'Carga manual de un listado de productos existentes (modo local, sin conexión a BC).'}
+            </p>
           </div>
           <div className="flex gap-2">
-            <button 
-              onClick={syncWithBC}
-              disabled={isSyncing}
-              className={`flex items-center gap-2 text-white text-xs font-bold px-4 py-2 rounded-lg border shadow-sm transition-all ${isSyncing ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 border-blue-700'}`}
-            >
-              {isSyncing ? (
-                <>
-                  <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Sincronizando...
-                </>
-              ) : (
-                <>
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  Sincronizar con BC API
-                </>
-              )}
-            </button>
+            {apiConfigured && onSyncWithBC && (
+              <button 
+                onClick={syncWithBC}
+                disabled={isSyncing}
+                className={`flex items-center gap-2 text-white text-xs font-bold px-4 py-2 rounded-lg border shadow-sm transition-all ${isSyncing ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 border-blue-700'}`}
+              >
+                {isSyncing ? (
+                  <>
+                    <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Actualizando...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Actualizar desde BC
+                  </>
+                )}
+              </button>
+            )}
             {externalProducts.length > 0 && (
               <button 
                 onClick={onClearProducts}
