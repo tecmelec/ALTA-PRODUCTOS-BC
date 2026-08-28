@@ -100,17 +100,49 @@ export const api = {
     return handle(res);
   },
 
-  /** Sincroniza el catálogo, llamando a syncProductsBatch en bucle hasta terminar. */
+  /** Sincroniza el catálogo, llamando a syncProductsBatch en bucle hasta terminar.
+   * Reintenta automáticamente ante fallos de red puntuales, y guarda el progreso
+   * para poder reanudar desde donde se quedó si al final falla del todo. */
   async syncAllProducts(onProgress?: (totalSynced: number) => void, full = false): Promise<number> {
-    let skip = 0;
+    const storageKey = full ? 'bc_sync_resume_full' : 'bc_sync_resume_incremental';
+    let skip = Number(localStorage.getItem(storageKey)) || 0;
     let total = 0;
+    const MAX_RETRIES_PER_BATCH = 4;
+
     // Límite de seguridad para no quedarnos en un bucle infinito ante un error inesperado.
-    for (let i = 0; i < 200; i++) {
-      const result = await api.syncProductsBatch(skip, full);
+    for (let i = 0; i < 500; i++) {
+      let result: { done: boolean; nextSkip: number; syncedThisRun: number } | null = null;
+      let lastError: any;
+
+      for (let attempt = 0; attempt < MAX_RETRIES_PER_BATCH; attempt++) {
+        try {
+          result = await api.syncProductsBatch(skip, full);
+          break;
+        } catch (err: any) {
+          lastError = err;
+          if (attempt < MAX_RETRIES_PER_BATCH - 1) {
+            await new Promise((r) => setTimeout(r, 500 * Math.pow(2, attempt))); // 500ms, 1s, 2s...
+          }
+        }
+      }
+
+      if (!result) {
+        // Guardamos el progreso para poder reanudar en el próximo intento.
+        localStorage.setItem(storageKey, String(skip));
+        throw new Error(
+          `${lastError?.message ?? 'Fallo de red'} — se sincronizaron ${skip} artículos antes del fallo; ` +
+          `al reintentar, se continuará desde ahí en vez de empezar de nuevo.`
+        );
+      }
+
       total += result.syncedThisRun;
       skip = result.nextSkip;
-      onProgress?.(total);
-      if (result.done) break;
+      onProgress?.(skip);
+
+      if (result.done) {
+        localStorage.removeItem(storageKey);
+        break;
+      }
     }
     return total;
   },
