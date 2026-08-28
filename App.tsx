@@ -277,7 +277,7 @@ const App: React.FC = () => {
                       onClick={() => handleFullSync(true)}
                       disabled={isFullSyncing}
                       className="text-gray-400 hover:text-gray-600 underline disabled:opacity-50"
-                      title="Vuelve a descargar todo el catálogo desde cero (más lento, úsalo si algo no cuadra)"
+                      title="Vuelve a descargar todo el catálogo desde cero y elimina de la app los artículos borrados o renumerados en BC (más lento)"
                     >
                       forzar completa
                     </button>

@@ -43,3 +43,5 @@ create table if not exists sync_meta (
 insert into sync_meta (id, last_cutoff)
 values ('products', null)
 on conflict (id) do nothing;
+
+alter table sync_meta add column if not exists full_sync_started_at timestamptz;

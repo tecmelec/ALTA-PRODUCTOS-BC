@@ -46,6 +46,31 @@ function toODataDate(d: Date): string {
   return d.toISOString().slice(0, 10); // YYYY-MM-DD
 }
 
+async function finishSync(supabase: ReturnType<typeof getSupabase>, wasFullSync: boolean): Promise<void> {
+  if (wasFullSync) {
+    // Averiguamos cuándo empezó esta sincronización completa y borramos
+    // cualquier artículo que no se haya tocado desde entonces: ya no existe
+    // en Business Central (se borró o cambió de número).
+    const { data: meta } = await supabase
+      .from('sync_meta')
+      .select('full_sync_started_at')
+      .eq('id', 'products')
+      .single();
+
+    if (meta?.full_sync_started_at) {
+      const { error: deleteError } = await supabase
+        .from('products')
+        .delete()
+        .lt('synced_at', meta.full_sync_started_at);
+      if (deleteError) {
+        console.error('No se pudieron limpiar los artículos obsoletos:', deleteError.message);
+      }
+    }
+  }
+
+  await supabase.from('sync_meta').upsert({ id: 'products', last_cutoff: toODataDate(new Date()) });
+}
+
 /**
  * Sincroniza Business Central → Supabase.
  *
@@ -80,6 +105,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         dateFilter = `&$filter=Last_Date_Modified ge ${toODataDate(cutoff)}`;
       }
       // Si no hay cutoff previo (primera vez), no hay filtro: se hace completa igualmente.
+    } else if (skip === 0) {
+      // Arranque de una sincronización completa nueva (no una continuación):
+      // marcamos el instante de inicio para poder limpiar después lo que
+      // ya no exista en BC (borrados o renumeraciones).
+      await supabase.from('sync_meta').upsert({ id: 'products', full_sync_started_at: new Date().toISOString() });
     }
 
     while (Date.now() - start < TIME_BUDGET_MS) {
@@ -87,7 +117,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const page = await fetchODataEntities(itemsUrl, query);
 
       if (page.length === 0) {
-        await supabase.from('sync_meta').upsert({ id: 'products', last_cutoff: toODataDate(new Date()) });
+        await finishSync(supabase, forceFull);
         return res.status(200).json({ done: true, nextSkip: skip, syncedThisRun, incremental: !forceFull });
       }
 
@@ -99,7 +129,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       syncedThisRun += page.length;
 
       if (page.length < PAGE_SIZE) {
-        await supabase.from('sync_meta').upsert({ id: 'products', last_cutoff: toODataDate(new Date()) });
+        await finishSync(supabase, forceFull);
         return res.status(200).json({ done: true, nextSkip: skip, syncedThisRun, incremental: !forceFull });
       }
     }
