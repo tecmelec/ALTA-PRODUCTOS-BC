@@ -27,7 +27,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     if (req.method === 'GET') {
-      const items = await fetchODataEntities(itemsUrl);
+      // Traemos solo los últimos N artículos (por número, orden descendente) en vez de
+      // la tabla completa: el plan gratuito de Vercel corta las funciones a los 10s,
+      // y listas grandes de Business Central pueden tardar más que eso.
+      const top = Math.min(Number(req.query.top) || 200, 500);
+      const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+
+      let query = `?$orderby=No desc&$top=${top}`;
+      if (search) {
+        const safe = search.replace(/'/g, "''");
+        query += `&$filter=substringof('${safe}',Description) or substringof('${safe}',No)`;
+      }
+
+      const items = await fetchODataEntities(itemsUrl, query);
       return res.status(200).json(items.map(mapBcItemToProduct));
     }
 
