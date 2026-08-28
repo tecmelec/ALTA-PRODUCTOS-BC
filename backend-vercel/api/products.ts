@@ -1,7 +1,9 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { applyCors } from './_lib/cors';
 import { fetchODataEntities, createODataEntity, computeNextNo, requireEnv } from './_lib/bcClient';
+import { getSupabase, mapRowToProduct, ProductRow } from './_lib/supabaseClient';
 
+// Campos reales de la página personalizada de Business Central (guiones bajos).
 function mapBcItemToProduct(item: any) {
   return {
     no: item.No,
@@ -17,40 +19,54 @@ function mapBcItemToProduct(item: any) {
   };
 }
 
-// Reintentos ante colisión de correlativo (dos altas casi simultáneas)
+function productToRow(p: ReturnType<typeof mapBcItemToProduct>): ProductRow {
+  return {
+    no: p.no,
+    description: p.description,
+    base_unit_of_measure: p.baseUnitOfMeasure || null,
+    inventory_posting_group: p.inventoryPostingGroup || null,
+    unit_price: p.unitPrice ?? null,
+    unit_cost: p.unitCost ?? null,
+    gen_prod_posting_group: p.genProdPostingGroup || null,
+    vat_prod_posting_group: p.vatProdPostingGroup || null,
+    manufacturer_code: p.manufacturerCode || null,
+    item_category_code: p.itemCategoryCode || null,
+    synced_at: new Date().toISOString(),
+  };
+}
+
 const MAX_RETRIES = 3;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (applyCors(req, res)) return;
 
-  const itemsUrl = requireEnv('BC_ITEMS_ENTITY_URL');
-
   try {
     if (req.method === 'GET') {
-      // Traemos solo los últimos N artículos (por número, orden descendente) en vez de
-      // la tabla completa: el plan gratuito de Vercel corta las funciones a los 10s,
-      // y listas grandes de Business Central pueden tardar más que eso.
-      const top = Math.min(Number(req.query.top) || 200, 500);
+      // Lectura desde la réplica en Supabase: rápida y sin límite de tamaño del catálogo.
+      const supabase = getSupabase();
       const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+      const limit = Math.min(Number(req.query.limit) || 200, 1000);
+      const offset = Number(req.query.offset) || 0;
 
-      let query = `?$orderby=No desc&$top=${top}`;
+      let query = supabase
+        .from('products')
+        .select('*')
+        .order('no', { ascending: false })
+        .range(offset, offset + limit - 1);
+
       if (search) {
-        const safe = search.replace(/'/g, "''");
-        query += `&$filter=substringof('${safe}',Description) or substringof('${safe}',No)`;
+        const safe = search.replace(/[%_]/g, '');
+        query = query.or(`description.ilike.%${safe}%,no.ilike.%${safe}%`);
       }
 
-      const items = await fetchODataEntities(itemsUrl, query);
+      const { data, error } = await query;
+      if (error) throw new Error(`Error consultando Supabase: ${error.message}`);
 
-      // Modo depuración temporal: ?raw=1 devuelve los campos tal cual los da BC,
-      // sin mapear, para poder ver los nombres reales de la página personalizada.
-      if (req.query.raw) {
-        return res.status(200).json(items);
-      }
-
-      return res.status(200).json(items.map(mapBcItemToProduct));
+      return res.status(200).json((data ?? []).map((row) => mapRowToProduct(row as ProductRow)));
     }
 
     if (req.method === 'POST') {
+      const itemsUrl = requireEnv('BC_ITEMS_ENTITY_URL');
       const body = req.body as {
         isGeneric: boolean;
         manufacturerCode?: string;
@@ -96,10 +112,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         try {
           const created = await createODataEntity(itemsUrl, payload);
-          return res.status(201).json(mapBcItemToProduct(created));
+          const product = mapBcItemToProduct(created);
+
+          // Reflejamos el alta en la réplica de Supabase para verla al instante.
+          // Si esto falla, no bloqueamos la respuesta: el producto ya existe en BC
+          // (fuente de verdad) y la próxima sincronización lo recogerá igualmente.
+          try {
+            const supabase = getSupabase();
+            await supabase.from('products').upsert(productToRow(product));
+          } catch (supabaseErr) {
+            console.error('No se pudo actualizar la réplica de Supabase tras crear el producto:', supabaseErr);
+          }
+
+          return res.status(201).json(product);
         } catch (err: any) {
           lastError = err;
-          // Si es un conflicto de clave duplicada, reintentamos con el siguiente número.
           const isConflict = err.status === 409 || /duplicate|already exists|ya existe/i.test(err.bcBody ?? '');
           if (!isConflict) throw err;
         }

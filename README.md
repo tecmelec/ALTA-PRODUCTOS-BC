@@ -63,13 +63,29 @@ La App Registration en Entra ID necesita permiso de **aplicación** (no delegado
 
 Tras guardar las variables, vuelve a desplegar el proyecto (Vercel → Deployments → "Redeploy") para que las tome.
 
-### 3. Conectar el frontend al backend
+### 4. Réplica de búsqueda en Supabase (catálogo completo)
+
+Para poder listar y buscar en **todo** el catálogo (no solo los últimos artículos) sin chocar con el límite de 10s de las funciones de Vercel en el plan gratuito, los productos se leen desde una réplica en Supabase, que se mantiene sincronizada con Business Central.
+
+1. En tu proyecto de Supabase → **SQL Editor** → pega y ejecuta el contenido de `backend-vercel/supabase-schema.sql`.
+2. En Supabase → **Project Settings → API**, copia la **URL del proyecto** y la **`service_role` key** (no la `anon` key — la `service_role` es la que tiene permisos de escritura desde el backend).
+3. En Vercel → tu proyecto → **Environment Variables**, añade:
+
+| Nombre | Valor |
+|---|---|
+| `SUPABASE_URL` | La URL de tu proyecto de Supabase |
+| `SUPABASE_SERVICE_ROLE_KEY` | La `service_role` key (nunca la compartas ni la pongas en el frontend) |
+
+4. Redespliega el proyecto de Vercel.
+5. En la app, como administrador, pulsa **"⇩ Sincronizar catálogo completo"** (arriba de la tabla de productos) para hacer la primera carga completa del catálogo. Las siguientes veces, cada alta nueva se refleja al instante, y puedes repetir la sincronización completa cuando quieras traer cambios hechos directamente en BC.
+
+### 5. Conectar el frontend al backend
 
 En **GitHub → Settings → Secrets and variables → Actions**, añade (o actualiza):
 
 | Secret | Valor |
 |---|---|
-| `VITE_API_BASE_URL` | La URL de tu proyecto de Vercel, ej. `https://alta-productos-bc-backend.vercel.app` |
+| `VITE_API_BASE_URL` | La URL de tu proyecto de Vercel, ej. `https://alta-productos-bc.vercel.app` |
 
 Vuelve a lanzar el workflow "Deploy to GitHub Pages" (o haz un push) para que el frontend se reconstruya apuntando al backend.
 

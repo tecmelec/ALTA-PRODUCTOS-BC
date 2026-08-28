@@ -52,14 +52,18 @@ const App: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isFullSyncing, setIsFullSyncing] = useState(false);
+  const [fullSyncProgress, setFullSyncProgress] = useState(0);
 
-  // Carga inicial y refresco de datos compartidos (en vivo desde Business Central)
-  const loadSharedData = useCallback(async () => {
+  // Carga inicial y refresco de datos compartidos (productos desde la réplica
+  // en Supabase; fabricantes/categorías en vivo desde Business Central)
+  const loadSharedData = useCallback(async (search?: string) => {
     if (!apiConfigured) return;
     try {
       setLoadError(null);
       const [prods, manufacturers, categories] = await Promise.all([
-        api.getProducts(),
+        api.getProducts({ search: search || undefined, limit: 200 }),
         api.getManufacturers(),
         api.getCategories(),
       ]);
@@ -78,6 +82,16 @@ const App: React.FC = () => {
     loadSharedData();
   }, [loadSharedData]);
 
+  // Búsqueda con debounce: al cambiar el término, esperamos un poco antes de consultar.
+  useEffect(() => {
+    if (!apiConfigured) return;
+    const timeout = setTimeout(() => {
+      loadSharedData(searchTerm);
+    }, 350);
+    return () => clearTimeout(timeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm]);
+
   useEffect(() => {
     if (apiConfigured) return; // en modo conectado, los productos viven en Business Central
     localStorage.setItem('bc_products', JSON.stringify(products));
@@ -95,9 +109,23 @@ const App: React.FC = () => {
   const handleRefresh = async () => {
     setIsSyncing(true);
     try {
-      await loadSharedData();
+      await loadSharedData(searchTerm);
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  const handleFullSync = async () => {
+    setIsFullSyncing(true);
+    setFullSyncProgress(0);
+    try {
+      const total = await api.syncAllProducts((count) => setFullSyncProgress(count));
+      await loadSharedData(searchTerm);
+      alert(`Sincronización completa: ${total} artículos actualizados desde Business Central.`);
+    } catch (err: any) {
+      alert(`Error al sincronizar el catálogo completo: ${err.message}`);
+    } finally {
+      setIsFullSyncing(false);
     }
   };
 
@@ -222,6 +250,27 @@ const App: React.FC = () => {
       <main className="max-w-7xl mx-auto p-4 md:p-8">
         {activeView === 'products' && (
           <div className="space-y-6">
+            {apiConfigured && (
+              <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Buscar por código o descripción…"
+                  className="w-full sm:w-80 px-4 py-2.5 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+                {currentUser === UserRole.ADMIN && (
+                  <button
+                    onClick={handleFullSync}
+                    disabled={isFullSyncing}
+                    className="text-xs font-bold text-gray-500 hover:text-gray-700 flex items-center gap-2 disabled:opacity-50"
+                    title="Descarga todo el catálogo de Business Central hacia la réplica de búsqueda (Supabase)"
+                  >
+                    {isFullSyncing ? `Sincronizando catálogo completo… (${fullSyncProgress})` : '⇩ Sincronizar catálogo completo'}
+                  </button>
+                )}
+              </div>
+            )}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">

@@ -40,16 +40,21 @@ export interface CreateProductInput {
 }
 
 export const api = {
-  /** Lee los productos directamente desde Business Central (fuente de verdad). */
-  async getProducts(): Promise<Product[]> {
-    const res = await fetch(apiUrl('/api/products'));
+  /** Lee los productos desde la réplica en Supabase (rápida, con búsqueda). */
+  async getProducts(params?: { search?: string; limit?: number; offset?: number }): Promise<Product[]> {
+    const qs = new URLSearchParams();
+    if (params?.search) qs.set('search', params.search);
+    if (params?.limit) qs.set('limit', String(params.limit));
+    if (params?.offset) qs.set('offset', String(params.offset));
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    const res = await fetch(apiUrl(`/api/products${suffix}`));
     return handle<Product[]>(res);
   },
 
   /**
    * Crea un producto en Business Central. El backend calcula el número
    * correlativo (por fabricante o por categoría si es genérico) y lo crea
-   * directamente en BC.
+   * directamente en BC, reflejándolo también en la réplica de Supabase.
    */
   async createProduct(input: CreateProductInput & { type: ProductType }): Promise<Product> {
     const res = await fetch(apiUrl('/api/products'), {
@@ -79,6 +84,35 @@ export const api = {
   async getCategories(): Promise<ItemCategory[]> {
     const res = await fetch(apiUrl('/api/categories'));
     return handle<ItemCategory[]>(res);
+  },
+
+  /**
+   * Sincroniza un lote de artículos desde Business Central hacia Supabase.
+   * Como el catálogo completo puede tardar más de lo que permite una sola
+   * petición, se llama repetidas veces con el `skip` devuelto hasta `done: true`.
+   */
+  async syncProductsBatch(skip: number): Promise<{ done: boolean; nextSkip: number; syncedThisRun: number }> {
+    const res = await fetch(apiUrl('/api/sync-products'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ skip }),
+    });
+    return handle(res);
+  },
+
+  /** Sincroniza el catálogo completo, llamando a syncProductsBatch en bucle. */
+  async syncAllProducts(onProgress?: (totalSynced: number) => void): Promise<number> {
+    let skip = 0;
+    let total = 0;
+    // Límite de seguridad para no quedarnos en un bucle infinito ante un error inesperado.
+    for (let i = 0; i < 200; i++) {
+      const result = await api.syncProductsBatch(skip);
+      total += result.syncedThisRun;
+      skip = result.nextSkip;
+      onProgress?.(total);
+      if (result.done) break;
+    }
+    return total;
   },
 };
 
