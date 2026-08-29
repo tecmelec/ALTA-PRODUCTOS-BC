@@ -89,6 +89,16 @@ En **GitHub → Settings → Secrets and variables → Actions**, añade (o actu
 
 Vuelve a lanzar el workflow "Deploy to GitHub Pages" (o haz un push) para que el frontend se reconstruya apuntando al backend.
 
+### 6. Sincronización completa automática (semanal)
+
+Además de los botones manuales, hay un Cron Job de Vercel que ejecuta una sincronización completa (con limpieza de borrados/renumeraciones) automáticamente **cada domingo a las 03:00 UTC**. Ya está definido en `backend-vercel/vercel.json` — solo falta un secreto para protegerlo:
+
+1. Genera una cadena aleatoria larga (por ejemplo con `openssl rand -hex 32`, o cualquier generador de contraseñas).
+2. En Vercel → Environment Variables, añade `CRON_SECRET` con ese valor.
+3. Redespliega. Vercel detecta automáticamente el bloque `crons` de `vercel.json` y añade el Cron Job — puedes verlo en tu proyecto → pestaña **"Cron Jobs"**, y disparar una ejecución manual desde ahí para probarlo.
+
+Puedes seguir usando el botón "forzar completa" de la app en cualquier momento sin esperar al domingo; ambos caminos limpian igual los borrados/renumeraciones.
+
 ## Desarrollo local
 
 ### Frontend

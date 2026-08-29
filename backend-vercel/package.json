@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "dependencies": {
-    "@supabase/supabase-js": "^2.45.4"
+    "@supabase/supabase-js": "^2.45.4",
+    "@vercel/functions": "^1.5.0"
   },
   "devDependencies": {
     "@vercel/node": "^3.2.0",

@@ -3,5 +3,11 @@
     "api/**/*.ts": {
       "maxDuration": 15
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron-full-sync",
+      "schedule": "0 3 * * 0"
+    }
+  ]
 }
