@@ -56,7 +56,7 @@ export const api = {
    * correlativo (por fabricante o por categoría si es genérico) y lo crea
    * directamente en BC, reflejándolo también en la réplica de Supabase.
    */
-  async createProduct(input: CreateProductInput & { type: ProductType }): Promise<Product> {
+  async createProduct(input: CreateProductInput & { type: ProductType }): Promise<Product & { dimensionWarning?: string }> {
     const res = await fetch(apiUrl('/api/products'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -73,7 +73,7 @@ export const api = {
         vatProdPostingGroup: input.vatProdPostingGroup,
       }),
     });
-    return handle<Product>(res);
+    return handle<Product & { dimensionWarning?: string }>(res);
   },
 
   async getManufacturers(): Promise<Manufacturer[]> {

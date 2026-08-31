@@ -139,7 +139,7 @@ const App: React.FC = () => {
   const handleAddProduct = async (newProduct: Product) => {
     if (apiConfigured) {
       try {
-        await api.createProduct({
+        const created = await api.createProduct({
           type: newProduct.type,
           description: newProduct.description,
           itemCategoryCode: newProduct.itemCategoryCode,
@@ -152,6 +152,9 @@ const App: React.FC = () => {
           vatProdPostingGroup: newProduct.vatProdPostingGroup,
         });
         await loadSharedData();
+        if (created.dimensionWarning) {
+          alert(`Producto ${created.no} creado, pero atención:\n\n${created.dimensionWarning}\n\nRevísalo manualmente en Business Central.`);
+        }
       } catch (err: any) {
         alert(`Error al crear el producto en Business Central: ${err.message}`);
         return;

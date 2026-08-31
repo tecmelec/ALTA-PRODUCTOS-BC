@@ -35,6 +35,23 @@ function productToRow(p: ReturnType<typeof mapBcItemToProduct>): ProductRow {
   };
 }
 
+// Toda alta de producto lleva siempre esta misma dimensión predeterminada
+// (Configuración → Dimensiones → GASTOS / MATERIAL / Mismo código).
+const DEFAULT_DIMENSION_CODE = 'GASTOS';
+const DEFAULT_DIMENSION_VALUE_CODE = 'MATERIAL';
+const DEFAULT_DIMENSION_VALUE_POSTING = 'Same Code'; // "Mismo código" en la UI; BC expone los Option en inglés
+
+async function assignDefaultDimension(no: string): Promise<void> {
+  const dimensionsUrl = requireEnv('BC_DEFAULT_DIMENSIONS_ENTITY_URL');
+  await createODataEntity(dimensionsUrl, {
+    Table_ID: 'Item',
+    No: no,
+    Dimension_Code: DEFAULT_DIMENSION_CODE,
+    Dimension_Value_Code: DEFAULT_DIMENSION_VALUE_CODE,
+    Value_Posting: DEFAULT_DIMENSION_VALUE_POSTING,
+  });
+}
+
 const MAX_RETRIES = 3;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -113,6 +130,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         try {
           const created = await createODataEntity(itemsUrl, payload);
           const product = mapBcItemToProduct(created);
+          let dimensionWarning: string | undefined;
+
+          try {
+            await assignDefaultDimension(product.no);
+          } catch (dimErr: any) {
+            console.error('No se pudo asignar la dimensión predeterminada:', dimErr);
+            dimensionWarning = `El producto se creó, pero falló al asignar la dimensión GASTOS/MATERIAL: ${dimErr.message}`;
+          }
 
           // Reflejamos el alta en la réplica de Supabase para verla al instante.
           // Si esto falla, no bloqueamos la respuesta: el producto ya existe en BC
@@ -124,7 +149,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             console.error('No se pudo actualizar la réplica de Supabase tras crear el producto:', supabaseErr);
           }
 
-          return res.status(201).json(product);
+          return res.status(201).json(dimensionWarning ? { ...product, dimensionWarning } : product);
         } catch (err: any) {
           lastError = err;
           const isConflict = err.status === 409 || /duplicate|already exists|ya existe/i.test(err.bcBody ?? '');
