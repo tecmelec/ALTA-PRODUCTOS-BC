@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "dependencies": {
+    "@google/genai": "^2.20.0",
     "@supabase/supabase-js": "^2.45.4",
     "@vercel/functions": "^1.5.0"
   },

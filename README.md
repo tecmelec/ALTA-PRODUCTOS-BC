@@ -89,6 +89,16 @@ En **GitHub → Settings → Secrets and variables → Actions**, añade (o actu
 
 Vuelve a lanzar el workflow "Deploy to GitHub Pages" (o haz un push) para que el frontend se reconstruya apuntando al backend.
 
+### 5b. Sugerencia de descripción con IA (botón "✨ Sugerir")
+
+Al dar de alta un producto por fabricante, el botón "Sugerir" busca la ficha del producto (priorizando matmax.es) y propone una descripción en formato ERP, usando Gemini con búsqueda en Google activada.
+
+1. Consigue una API Key de Gemini en https://aistudio.google.com/apikey (tiene capa gratuita).
+2. En Vercel → Environment Variables, añade `GEMINI_API_KEY` con esa clave.
+3. Redespliega.
+
+La clave vive solo en el backend — nunca se envía al navegador.
+
 ### 6. Sincronización completa automática (semanal)
 
 Además de los botones manuales, hay un Cron Job de Vercel que ejecuta una sincronización completa (con limpieza de borrados/renumeraciones) automáticamente **cada domingo a las 03:00 UTC**. Ya está definido en `backend-vercel/vercel.json` — solo falta un secreto para protegerlo:

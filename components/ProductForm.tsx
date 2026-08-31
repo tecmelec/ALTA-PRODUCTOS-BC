@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { GoogleGenAI } from "@google/genai";
+import { api } from '../api';
 import { 
   ProductType, 
   CostingMethod, 
@@ -105,81 +105,25 @@ const ProductForm: React.FC<ProductFormProps> = ({
 
   const handleSuggestDescription = async () => {
     if (!manufacturerRef) return;
-    
+
     const manufacturerName = manufacturers.find(m => m.code === formData.manufacturerCode)?.name || '';
-    
+
     setIsSuggesting(true);
     setGroundingSources([]);
     setQuotaExceeded(false);
 
     try {
-      const apiKey = process.env.GEMINI_API_KEY;
-      
-      // En Vercel u otros entornos, si la variable no está configurada, puede llegar como 'undefined' o vacío
-      if (!apiKey || apiKey === 'undefined') {
-        const isVercel = window.location.hostname.includes('vercel.app');
-        const errorMessage = isVercel 
-          ? "La API Key de Gemini no está configurada en las variables de entorno de Vercel. Por favor, añada GEMINI_API_KEY en el panel de control de Vercel."
-          : "Falta la clave API de Gemini. Por favor, configúrela para usar la sugerencia por IA.";
-        alert(errorMessage);
-        setIsSuggesting(false);
-        return;
+      const result = await api.suggestDescription(manufacturerName, manufacturerRef);
+      if (result.description) {
+        setFormData(prev => ({ ...prev, description: result.description }));
       }
-
-      const ai = new GoogleGenAI({ apiKey });
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: `Investiga en el portal especializado MATMAX (https://www.matmax.es) el producto del fabricante "${manufacturerName}" con referencia "${manufacturerRef}".
-
-OBJETIVO: Obtener la descripción técnica real y adaptarla al formato ERP.
-Ejemplo de referencia: 
-Fabricante: Solera, Ref: 8004.
-Búsqueda en Matmax -> "Base múltiple 4 tomas 16A blanca Ref. 8004"
-Descripción sugerida final -> "BASE MÚLTIPLE 4 TOMAS 16A BLANCA"
-
-REGLAS DE FORMATO ERP:
-1. Empieza con el nombre del producto (sustantivo principal).
-2. Incluye ESPECIFICACIONES TÉCNICAS (polos, amperaje, dimensiones, color, etc.).
-3. TODO EN MAYÚSCULAS.
-4. ELIMINA la referencia del fabricante ("REF. XXXX") si aparece al final de la descripción encontrada.
-5. NO uses artículos (EL, LA, LOS) ni introducciones.
-6. Devuelve ÚNICAMENTE el texto de la descripción.`,
-        config: {
-          tools: [{ googleSearch: {} }]
-        }
-      });
-      
-      const suggestedText = response.text?.trim().toUpperCase();
-      if (suggestedText) {
-        setFormData(prev => ({ ...prev, description: suggestedText }));
-      }
-
-      const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
-      if (chunks) {
-        const sources: GroundingSource[] = chunks
-          .filter(chunk => chunk.web)
-          .map(chunk => ({
-            title: chunk.web.title,
-            uri: chunk.web.uri
-          }));
-        setGroundingSources(sources);
+      if (result.sources?.length) {
+        setGroundingSources(result.sources);
       }
     } catch (error: any) {
-      console.error("DEBUG: Error suggesting description:", error);
-      const errorMsg = error?.message || "";
-      
-      if (errorMsg.includes("429") || errorMsg.includes("quota") || errorMsg.includes("RESOURCE_EXHAUSTED")) {
+      const errorMsg: string = error?.message || '';
+      if (/cuota|quota|429/i.test(errorMsg)) {
         setQuotaExceeded(true);
-      } else if (errorMsg.includes("Requested entity was not found") || errorMsg.includes("API_KEY_INVALID")) {
-        // Error de clave inválida o proyecto no encontrado
-        alert("La clave API seleccionada no es válida. Por favor, asegúrese de que GEMINI_API_KEY sea correcta.");
-        try {
-          if ((window as any).aistudio?.openSelectKey) {
-            await (window as any).aistudio.openSelectKey();
-          }
-        } catch (e) {
-          console.warn("AI Studio select key is not available in this environment.");
-        }
       } else {
         alert(`Error al consultar la IA: ${errorMsg || 'Error desconocido'}`);
       }
@@ -187,6 +131,7 @@ REGLAS DE FORMATO ERP:
       setIsSuggesting(false);
     }
   };
+
 
   const validateAndSave = () => {
     const desc = formData.description?.trim();
@@ -382,18 +327,8 @@ REGLAS DE FORMATO ERP:
                   </div>
                   <div className="flex-1">
                     <p className="text-sm font-bold text-amber-800">Límite de cuota alcanzado</p>
-                    <p className="text-xs text-amber-700 mt-1">Has excedido el uso gratuito compartido. Para continuar sugiriendo descripciones, puedes conectar tu propia cuenta de Google Cloud.</p>
+                    <p className="text-xs text-amber-700 mt-1">Se ha excedido la cuota gratuita de Gemini para hoy. Puedes escribir la descripción a mano, o pedirle al administrador que revise la cuota/facturación en Google AI Studio.</p>
                     <div className="mt-3 flex items-center gap-3">
-                      <button
-                        onClick={async () => {
-                          // Fixed: Use (window as any).aistudio to call openSelectKey
-                          await (window as any).aistudio.openSelectKey();
-                          setQuotaExceeded(false);
-                        }}
-                        className="text-xs bg-amber-600 hover:bg-amber-700 text-white font-bold py-1.5 px-3 rounded shadow-sm transition-colors"
-                      >
-                        Configurar mi propia API Key
-                      </button>
                       <a 
                         href="https://ai.google.dev/gemini-api/docs/billing" 
                         target="_blank" 

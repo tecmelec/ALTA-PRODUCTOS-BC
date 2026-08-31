@@ -87,6 +87,22 @@ export const api = {
   },
 
   /**
+   * Sugiere una descripción de producto (busca en matmax.es y la web,
+   * vía Gemini con grounding). La clave de Gemini vive solo en el backend.
+   */
+  async suggestDescription(
+    manufacturerName: string,
+    manufacturerRef: string
+  ): Promise<{ description: string; sources: { title: string; uri: string }[] }> {
+    const res = await fetch(apiUrl('/api/suggest-description'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ manufacturerName, manufacturerRef }),
+    });
+    return handle(res);
+  },
+
+  /**
    * Sincroniza un lote de artículos desde Business Central hacia Supabase.
    * Por defecto es incremental (solo lo que cambió); pasa `full: true` para
    * forzar una sincronización completa desde cero.
