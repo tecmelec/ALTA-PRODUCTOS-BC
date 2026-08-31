@@ -12,7 +12,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const url = requireEnv('BC_DEFAULT_DIMENSIONS_ENTITY_URL');
     const top = Number(req.query.top) || 5;
-    const entities = await fetchODataEntities(url, `?$top=${top}`);
+    const filter = typeof req.query.filter === 'string' ? `&$filter=${req.query.filter}` : '';
+    const entities = await fetchODataEntities(url, `?$top=${top}${filter}`);
     return res.status(200).json(entities);
   } catch (err: any) {
     console.error(err);
