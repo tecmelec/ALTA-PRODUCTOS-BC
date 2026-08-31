@@ -44,7 +44,7 @@ const DEFAULT_DIMENSION_VALUE_POSTING = 'Same Code'; // "Mismo código" en la UI
 async function assignDefaultDimension(no: string): Promise<void> {
   const dimensionsUrl = requireEnv('BC_DEFAULT_DIMENSIONS_ENTITY_URL');
   await createODataEntity(dimensionsUrl, {
-    Table_ID: 'Item',
+    Table_ID: 27, // Tabla "Item" en Business Central (confirmado vía datos reales)
     No: no,
     Dimension_Code: DEFAULT_DIMENSION_CODE,
     Dimension_Value_Code: DEFAULT_DIMENSION_VALUE_CODE,
