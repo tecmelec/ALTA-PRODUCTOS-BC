@@ -96,8 +96,12 @@ REGLAS DE FORMATO ERP:
 5. NO uses artículos (EL, LA, LOS) ni introducciones.
 6. Si la información no parece corresponder realmente a este producto, indícalo claramente en vez de inventar.
 7. Devuelve ÚNICAMENTE el texto de la descripción (o el aviso del punto 6).`,
-      // Sin herramienta de búsqueda: Gemini solo redacta a partir del
-      // contexto que ya le pasamos, así que se mantiene en el nivel gratuito.
+      config: {
+        // Sin herramienta de búsqueda (grounding es de pago) y sin "thinking"
+        // extra: esta tarea es sencilla y así respondemos más rápido, dentro
+        // del límite de 10s del plan gratuito de Vercel.
+        thinkingConfig: { thinkingBudget: 0 },
+      },
     });
 
     const description = aiResponse.text?.trim().toUpperCase() ?? '';
