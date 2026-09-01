@@ -103,6 +103,8 @@ const ProductForm: React.FC<ProductFormProps> = ({
     setFormData(prev => ({ ...prev, [name]: processedValue }));
   };
 
+  const MAX_DESCRIPTION_LENGTH = 100; // Límite del campo Description en Business Central
+
   const handleSuggestDescription = async () => {
     if (!manufacturerRef) return;
 
@@ -115,7 +117,16 @@ const ProductForm: React.FC<ProductFormProps> = ({
     try {
       const result = await api.suggestDescription(manufacturerName, manufacturerRef);
       if (result.description) {
-        setFormData(prev => ({ ...prev, description: result.description }));
+        const refSuffix = ` REF. ${manufacturerRef}`;
+        const maxDescLen = MAX_DESCRIPTION_LENGTH - refSuffix.length;
+        let suggested = result.description;
+        if (suggested.length > maxDescLen) {
+          suggested = suggested.slice(0, maxDescLen);
+          const lastSpace = suggested.lastIndexOf(' ');
+          if (lastSpace > 0) suggested = suggested.slice(0, lastSpace);
+          suggested = suggested.trim();
+        }
+        setFormData(prev => ({ ...prev, description: suggested }));
       }
       if (result.sources?.length) {
         setGroundingSources(result.sources);
@@ -136,11 +147,28 @@ const ProductForm: React.FC<ProductFormProps> = ({
   const validateAndSave = () => {
     const desc = formData.description?.trim();
     if (!desc) return;
-    
+
     let finalDescription = desc;
     if (formData.type === ProductType.FABRICANTE && manufacturerRef) {
-        const refSuffix = ` REF. ${manufacturerRef}`;
-        if (!finalDescription.endsWith(refSuffix)) finalDescription = `${finalDescription}${refSuffix}`;
+      const refSuffix = ` REF. ${manufacturerRef}`;
+
+      // Si la descripción + la referencia superan el límite de BC, recortamos
+      // la descripción (nunca la referencia) por la última palabra completa
+      // que quepa, para no cortar una palabra a la mitad.
+      const maxDescLen = MAX_DESCRIPTION_LENGTH - refSuffix.length;
+      let trimmedDesc = desc;
+      if (trimmedDesc.length > maxDescLen) {
+        trimmedDesc = trimmedDesc.slice(0, maxDescLen);
+        const lastSpace = trimmedDesc.lastIndexOf(' ');
+        if (lastSpace > 0) trimmedDesc = trimmedDesc.slice(0, lastSpace);
+        trimmedDesc = trimmedDesc.trim();
+      }
+
+      finalDescription = trimmedDesc.endsWith(refSuffix.trim())
+        ? trimmedDesc
+        : `${trimmedDesc}${refSuffix}`;
+    } else if (finalDescription.length > MAX_DESCRIPTION_LENGTH) {
+      finalDescription = finalDescription.slice(0, MAX_DESCRIPTION_LENGTH).trim();
     }
     
     const completeProduct: Product = {
@@ -293,7 +321,11 @@ const ProductForm: React.FC<ProductFormProps> = ({
               <input
                 type="text"
                 name="description"
-                maxLength={100}
+                maxLength={
+                  formData.type === ProductType.FABRICANTE && manufacturerRef
+                    ? MAX_DESCRIPTION_LENGTH - ` REF. ${manufacturerRef}`.length
+                    : MAX_DESCRIPTION_LENGTH
+                }
                 value={formData.description || ''}
                 onBlur={() => setDescriptionTouched(true)}
                 onChange={handleInputChange}
@@ -315,6 +347,11 @@ const ProductForm: React.FC<ProductFormProps> = ({
                 </button>
               )}
             </div>
+            {formData.type === ProductType.FABRICANTE && manufacturerRef && (
+              <p className="text-xs text-gray-400">
+                Máximo {MAX_DESCRIPTION_LENGTH - ` REF. ${manufacturerRef}`.length} caracteres aquí (se añadirá " REF. {manufacturerRef}" automáticamente, hasta 100 en total).
+              </p>
+            )}
 
             {/* Aviso de Cuota Excedida con solución */}
             {quotaExceeded && (
