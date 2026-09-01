@@ -29,7 +29,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const ai = new GoogleGenAI({ apiKey });
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.6-flash',
       contents: `Busca el producto del fabricante "${manufacturerName ?? ''}" con referencia "${manufacturerRef}".
 
 Prioriza como fuente el portal especializado MATMAX (https://www.matmax.es), que suele tener la ficha técnica de este tipo de material. Si no encuentras el producto ahí, busca en la web general (por ejemplo, la web oficial del fabricante).
