@@ -91,13 +91,17 @@ Vuelve a lanzar el workflow "Deploy to GitHub Pages" (o haz un push) para que el
 
 ### 5b. Sugerencia de descripción con IA (botón "✨ Sugerir")
 
-Al dar de alta un producto por fabricante, el botón "Sugerir" busca la ficha del producto (priorizando matmax.es) y propone una descripción en formato ERP, usando Gemini con búsqueda en Google activada.
+Al dar de alta un producto por fabricante, el botón "Sugerir" busca la ficha del producto (priorizando matmax.es) y propone una descripción en formato ERP. Usa dos servicios, ambos con capa gratuita sin necesidad de tarjeta:
 
-1. Consigue una API Key de Gemini en https://aistudio.google.com/apikey (tiene capa gratuita).
-2. En Vercel → Environment Variables, añade `GEMINI_API_KEY` con esa clave.
-3. Redespliega.
+- **Tavily** (búsqueda web) — 1.000 búsquedas gratis al mes, sin tarjeta.
+- **Gemini** (redacción del texto a partir de lo encontrado, sin usar su búsqueda integrada, que sí requiere facturación) — gratis.
 
-La clave vive solo en el backend — nunca se envía al navegador.
+1. Consigue una clave de Tavily en https://tavily.com (regístrate, no pide tarjeta).
+2. Consigue una API Key de Gemini en https://aistudio.google.com/apikey (tampoco pide tarjeta para este uso, sin herramienta de búsqueda).
+3. En Vercel → Environment Variables, añade `TAVILY_API_KEY` y `GEMINI_API_KEY` con esos valores.
+4. Redespliega.
+
+Ambas claves viven solo en el backend — nunca se envían al navegador.
 
 ### 6. Sincronización completa automática (semanal)
 
