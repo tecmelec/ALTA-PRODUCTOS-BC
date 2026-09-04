@@ -87,19 +87,33 @@ export const api = {
   },
 
   /**
-   * Sugiere una descripción de producto (busca en matmax.es y la web,
-   * vía Gemini con grounding). La clave de Gemini vive solo en el backend.
+   * Sugiere una descripción de producto (busca en matmax.es y la web con
+   * Tavily; Gemini solo redacta). Reintenta una vez ante un fallo de red
+   * puntual (p.ej. un timeout esporádico del backend).
    */
   async suggestDescription(
     manufacturerName: string,
     manufacturerRef: string
   ): Promise<{ description: string; sources: { title: string; uri: string }[] }> {
-    const res = await fetch(apiUrl('/api/suggest-description'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ manufacturerName, manufacturerRef }),
-    });
-    return handle(res);
+    const attempt = async () => {
+      const res = await fetch(apiUrl('/api/suggest-description'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manufacturerName, manufacturerRef }),
+      });
+      return handle<{ description: string; sources: { title: string; uri: string }[] }>(res);
+    };
+
+    try {
+      return await attempt();
+    } catch (err: any) {
+      // "Failed to fetch" es un fallo de red (p.ej. timeout puntual del
+      // backend); lo reintentamos una vez antes de darnos por vencidos.
+      if (/Failed to fetch/i.test(err?.message ?? '')) {
+        return await attempt();
+      }
+      throw err;
+    }
   },
 
   /**

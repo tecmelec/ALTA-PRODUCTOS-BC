@@ -60,12 +60,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const query = `${manufacturerName ?? ''} ${manufacturerRef}`.trim();
 
   try {
-    let results = await tavilySearch(query, ['matmax.es']);
-    if (results.length === 0) {
-      // Sin resultados en matmax.es: ampliamos a la web general
-      // (por ejemplo, la web oficial del fabricante).
-      results = await tavilySearch(query);
-    }
+    // Lanzamos ambas búsquedas en paralelo (en vez de esperar a que la
+    // primera falle) para reducir el tiempo total y evitar el límite de
+    // 10s del plan gratuito de Vercel.
+    const [matmaxSettled, generalSettled] = await Promise.allSettled([
+      tavilySearch(query, ['matmax.es']),
+      tavilySearch(query),
+    ]);
+    const matmaxResults = matmaxSettled.status === 'fulfilled' ? matmaxSettled.value : [];
+    const generalResults = generalSettled.status === 'fulfilled' ? generalSettled.value : [];
+    const results = (matmaxResults.length > 0 ? matmaxResults : generalResults).slice(0, 2);
 
     if (results.length === 0) {
       return res.status(200).json({
@@ -75,8 +79,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
+    const MAX_CONTENT_CHARS = 500; // recortamos para que Gemini responda más rápido
     const context = results
-      .map((r, i) => `Fuente ${i + 1} (${r.url}):\n${r.title}\n${r.content}`)
+      .map((r, i) => `Fuente ${i + 1} (${r.url}):\n${r.title}\n${r.content.slice(0, MAX_CONTENT_CHARS)}`)
       .join('\n\n');
 
     const apiKey = requireEnv('GEMINI_API_KEY');
