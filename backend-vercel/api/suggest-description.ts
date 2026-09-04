@@ -1,5 +1,5 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, ThinkingLevel } from '@google/genai';
 import { applyCors } from './_lib/cors';
 import { requireEnv } from './_lib/bcClient';
 
@@ -101,8 +101,12 @@ REGLAS DE FORMATO ERP:
 5. NO uses artículos (EL, LA, LOS) ni introducciones.
 6. Si la información no parece corresponder realmente a este producto, indícalo claramente en vez de inventar.
 7. Devuelve ÚNICAMENTE el texto de la descripción (o el aviso del punto 6).`,
-      // Sin herramienta de búsqueda: Gemini solo redacta a partir del
-      // contexto que ya le pasamos, así que se mantiene en el nivel gratuito.
+      config: {
+        // Gemini 3.x usa "thinkingLevel" (no "thinkingBudget", que es de la
+        // familia 2.5). LOW acelera mucho la respuesta para una tarea tan
+        // sencilla como esta, clave para no superar el límite de Vercel.
+        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+      },
     });
 
     const description = aiResponse.text?.trim().toUpperCase() ?? '';
