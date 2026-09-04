@@ -46,7 +46,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
   
   const [formData, setFormData] = useState<Partial<Product>>({
     type: ProductType.FABRICANTE,
-    baseUnitOfMeasure: units[0] || 'UD',
+    baseUnitOfMeasure: units.includes('UD') ? 'UD' : (units[0] || 'UD'),
     inventoryPostingGroup: 'MERCADERÍA', 
     genProdPostingGroup: 'MERCADERÍA',
     vatProdPostingGroup: 'IVA21',        
