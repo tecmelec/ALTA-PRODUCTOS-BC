@@ -62,16 +62,18 @@ const App: React.FC = () => {
     if (!apiConfigured) return;
     try {
       setLoadError(null);
-      const [prods, manufacturers, categories] = await Promise.all([
+      const [prods, manufacturers, categories, units] = await Promise.all([
         api.getProducts({ search: search || undefined, limit: 200 }),
         api.getManufacturers(),
         api.getCategories(),
+        api.getUnits(),
       ]);
       setProducts(prods);
       setSettings(prev => ({
         ...prev,
         manufacturers: manufacturers.length > 0 ? manufacturers : prev.manufacturers,
         categories: categories.length > 0 ? categories : prev.categories,
+        unitsOfMeasure: units.length > 0 ? units : prev.unitsOfMeasure,
       }));
     } catch (err: any) {
       setLoadError(err.message ?? 'Error cargando datos desde Business Central');
@@ -344,7 +346,15 @@ const App: React.FC = () => {
 
         {activeView === 'inspection' && <ReferenceInspection products={products} externalProducts={externalProducts} />}
 
-        {activeView === 'settings' && <Settings settings={settings} onUpdateSettings={setSettings} currentRole={currentUser} />}
+        {activeView === 'settings' && (
+          <Settings
+            settings={settings}
+            onUpdateSettings={setSettings}
+            currentRole={currentUser}
+            apiConfigured={apiConfigured}
+            onRefreshShared={loadSharedData}
+          />
+        )}
       </main>
 
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Alta de Producto">

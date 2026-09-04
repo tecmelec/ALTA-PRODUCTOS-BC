@@ -45,3 +45,13 @@ values ('products', null)
 on conflict (id) do nothing;
 
 alter table sync_meta add column if not exists full_sync_started_at timestamptz;
+
+-- Unidades de medida: se gestionan dentro de la app (no vienen de BC),
+-- pero se comparten entre todos los usuarios.
+create table if not exists units_of_measure (
+  code text primary key
+);
+alter table units_of_measure enable row level security;
+
+insert into units_of_measure (code) values ('UD'), ('METRO'), ('KG'), ('LITRO'), ('CAJA')
+on conflict (code) do nothing;

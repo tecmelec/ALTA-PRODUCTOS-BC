@@ -86,6 +86,25 @@ export const api = {
     return handle<ItemCategory[]>(res);
   },
 
+  async getUnits(): Promise<string[]> {
+    const res = await fetch(apiUrl('/api/units'));
+    return handle<string[]>(res);
+  },
+
+  async addUnit(code: string): Promise<void> {
+    const res = await fetch(apiUrl('/api/units'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+    });
+    await handle(res);
+  },
+
+  async deleteUnit(code: string): Promise<void> {
+    const res = await fetch(apiUrl(`/api/units/${encodeURIComponent(code)}`), { method: 'DELETE' });
+    await handle(res);
+  },
+
   /**
    * Sugiere una descripción de producto (busca en matmax.es y la web con
    * Tavily; Gemini solo redacta). Reintenta una vez ante un fallo de red

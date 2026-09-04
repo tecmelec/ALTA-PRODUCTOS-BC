@@ -1,17 +1,19 @@
 
 import React, { useState } from 'react';
 import { AppSettings, UserRole, Manufacturer, ItemCategory } from '../types';
-import { isApiConfigured } from '../api';
+import { api, isApiConfigured } from '../api';
 
 interface SettingsProps {
   settings: AppSettings;
   onUpdateSettings: (settings: AppSettings) => void;
   currentRole: UserRole;
+  onRefreshShared?: () => Promise<void>;
 }
 
-const Settings: React.FC<SettingsProps> = ({ settings, onUpdateSettings, currentRole }) => {
+const Settings: React.FC<SettingsProps> = ({ settings, onUpdateSettings, currentRole, onRefreshShared }) => {
   const [activeTab, setActiveTab] = useState<'manufacturers' | 'categories' | 'units' | 'roles' | 'api'>('manufacturers');
   const [newItem, setNewItem] = useState({ code: '', name: '', desc: '', unit: '' });
+  const [isSavingUnit, setIsSavingUnit] = useState(false);
   const apiConfigured = isApiConfigured();
 
   const isEditable = currentRole === UserRole.ADMIN;
@@ -23,25 +25,64 @@ const Settings: React.FC<SettingsProps> = ({ settings, onUpdateSettings, current
     onUpdateSettings(newSettings);
   };
 
-  const addItem = (type: 'manufacturer' | 'category' | 'unit') => {
+  const addItem = async (type: 'manufacturer' | 'category' | 'unit') => {
+    if (type === 'unit' && newItem.unit) {
+      const code = newItem.unit.toUpperCase();
+      if (apiConfigured) {
+        setIsSavingUnit(true);
+        try {
+          await api.addUnit(code);
+          await onRefreshShared?.();
+        } catch (err: any) {
+          alert(`Error al guardar la unidad: ${err.message}`);
+        } finally {
+          setIsSavingUnit(false);
+        }
+      } else {
+        const newSettings = { ...settings };
+        newSettings.unitsOfMeasure.push(code);
+        onUpdateSettings(newSettings);
+      }
+      setNewItem({ code: '', name: '', desc: '', unit: '' });
+      return;
+    }
+
     const newSettings = { ...settings };
     if (type === 'manufacturer' && newItem.code && newItem.name) {
       newSettings.manufacturers.push({ code: newItem.code.toUpperCase(), name: newItem.name.toUpperCase() });
     } else if (type === 'category' && newItem.code && newItem.desc) {
       newSettings.categories.push({ code: newItem.code.toUpperCase(), description: newItem.desc.toUpperCase() });
-    } else if (type === 'unit' && newItem.unit) {
-      newSettings.unitsOfMeasure.push(newItem.unit.toUpperCase());
     }
     onUpdateSettings(newSettings);
     setNewItem({ code: '', name: '', desc: '', unit: '' });
   };
 
-  const removeItem = (type: 'manufacturer' | 'category' | 'unit', index: number) => {
+  const removeItem = async (type: 'manufacturer' | 'category' | 'unit', index: number) => {
     if (!isEditable) return;
+
+    if (type === 'unit') {
+      const code = settings.unitsOfMeasure[index];
+      if (apiConfigured) {
+        setIsSavingUnit(true);
+        try {
+          await api.deleteUnit(code);
+          await onRefreshShared?.();
+        } catch (err: any) {
+          alert(`Error al eliminar la unidad: ${err.message}`);
+        } finally {
+          setIsSavingUnit(false);
+        }
+      } else {
+        const newSettings = { ...settings };
+        newSettings.unitsOfMeasure.splice(index, 1);
+        onUpdateSettings(newSettings);
+      }
+      return;
+    }
+
     const newSettings = { ...settings };
     if (type === 'manufacturer') newSettings.manufacturers.splice(index, 1);
     if (type === 'category') newSettings.categories.splice(index, 1);
-    if (type === 'unit') newSettings.unitsOfMeasure.splice(index, 1);
     onUpdateSettings(newSettings);
   };
 
