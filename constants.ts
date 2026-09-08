@@ -1,13 +1,55 @@
 
 import { ItemCategory, Manufacturer } from './types';
 
+// Códigos de categoría de gastos generales / contables que no deben
+// mostrarse en la app (no son categorías de producto de cara al usuario).
+// Nota: cuando la app está conectada a Business Central, el filtrado real
+// ocurre en backend-vercel/api/categories.ts; esta lista se usa además
+// aquí como respaldo (modo offline/demo y datos ya guardados en el navegador).
+export const HIDDEN_CATEGORY_CODES: string[] = [
+  '1GG',
+  '62000002',
+  '62100001',
+  '62100002',
+  '62100003',
+  '62100006',
+  '62100008',
+  '62200002',
+  '62200004',
+  '62200006',
+  '62200007',
+  '62300001',
+  '62300003',
+  '62300005',
+  '62300007',
+  '62300008',
+  '62700001',
+  '62700002',
+  '62800001',
+  '62800003',
+  '62900002',
+  '62900003',
+  '62900004',
+  '62900005',
+  '62900006',
+  '62900007',
+  '62900009',
+  '62900010',
+  '62900011',
+  '62900012',
+  '62900013',
+  '62900014',
+  '62900015',
+  '62900016',
+  '62000000',
+  '62000001',
+];
+
+// Filtra cualquier lista de categorías para excluir las categorías ocultas.
+export const filterHiddenCategories = (categories: ItemCategory[]): ItemCategory[] =>
+  categories.filter(c => !HIDDEN_CATEGORY_CODES.includes(c.code));
+
 export const ITEM_CATEGORIES: ItemCategory[] = [
-  { code: '1GG', description: 'GASTOS GENERALES' },
-  { code: '62000002', description: 'Carburante' },
-  { code: '62100001', description: 'Alquiler de maquinaria' },
-  { code: '62100002', description: 'Alquiler miguel unamuno' },
-  { code: '62200002', description: 'Mant. repar. - vehiculos' },
-  { code: '62300001', description: 'Servicios profesionales indep.' },
   { code: 'AAI', description: 'APARAMENTA PANEL DE AISLAMIENTO' },
   { code: 'APA', description: 'APARAMENTA' },
   { code: 'AUV', description: 'AUDIO VISUAL' },

@@ -6,7 +6,7 @@ import ProductForm from './components/ProductForm';
 import Settings from './components/Settings';
 import ExternalProducts from './components/ExternalProducts';
 import ReferenceInspection from './components/ReferenceInspection';
-import { ITEM_CATEGORIES, MANUFACTURERS, UNITS_OF_MEASURE } from './constants';
+import { ITEM_CATEGORIES, MANUFACTURERS, UNITS_OF_MEASURE, filterHiddenCategories } from './constants';
 import { api, isApiConfigured } from './api';
 
 const DEFAULT_BC_CONFIG: BCConfig = {
@@ -47,6 +47,9 @@ const App: React.FC = () => {
     const saved = localStorage.getItem('bc_settings');
     const parsed = saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
     if (!parsed.bcConfig) parsed.bcConfig = DEFAULT_BC_CONFIG;
+    // Filtramos por si quedaron categorías ocultas guardadas en localStorage
+    // de una sesión anterior.
+    parsed.categories = filterHiddenCategories(parsed.categories || []);
     return parsed;
   });
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -68,11 +71,12 @@ const App: React.FC = () => {
         api.getCategories(),
         api.getUnits(),
       ]);
+      const filteredCategories = filterHiddenCategories(categories);
       setProducts(prods);
       setSettings(prev => ({
         ...prev,
         manufacturers: manufacturers.length > 0 ? manufacturers : prev.manufacturers,
-        categories: categories.length > 0 ? categories : prev.categories,
+        categories: filteredCategories.length > 0 ? filteredCategories : prev.categories,
         unitsOfMeasure: units.length > 0 ? units : prev.unitsOfMeasure,
       }));
     } catch (err: any) {
@@ -173,8 +177,9 @@ const App: React.FC = () => {
   };
 
   const handleBulkCategories = (newCategories: ItemCategory[]) => {
-    setSettings(prev => ({ ...prev, categories: newCategories }));
-    alert(`${newCategories.length} categorías cargadas correctamente.`);
+    const filtered = filterHiddenCategories(newCategories);
+    setSettings(prev => ({ ...prev, categories: filtered }));
+    alert(`${filtered.length} categorías cargadas correctamente.`);
   };
 
   return (
