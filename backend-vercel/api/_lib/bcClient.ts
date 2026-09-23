@@ -98,30 +98,45 @@ export async function createODataEntity(entityUrl: string, payload: Record<strin
   return res.json();
 }
 
-/** Devuelve la última "No" que empieza por el prefijo dado (o null si no hay ninguna). */
-export async function getLastNoWithPrefix(itemsUrl: string, prefix: string): Promise<string | null> {
-  // OData: filtramos por prefijo y ordenamos descendente, pidiendo solo 1 resultado.
-  const query = `?$filter=startswith(No,'${prefix.replace(/'/g, "''")}')&$orderby=No desc&$top=1`;
-  const res = await authFetch(`${itemsUrl}${query}`);
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Error consultando el correlativo en Business Central (${res.status}): ${text}`);
+// El correlativo de un "No" (prefijo + número) debe tener EXACTAMENTE 4
+// dígitos. Un código con el prefijo correcto pero 3 o 5 dígitos tras él
+// está mal codificado (creado a mano, fuera del estándar) y se ignora por
+// completo: no cuenta para el correlativo ni bloquea el hueco que ocupa.
+const FOUR_DIGIT_SUFFIX = /^\d{4}$/;
+
+/**
+ * Devuelve los números (parte correlativa, ya convertida a entero) de todos
+ * los artículos existentes con el prefijo dado, ignorando cualquier código
+ * mal codificado (correlativo con más o menos de 4 dígitos).
+ */
+async function getUsedNumbersWithPrefix(itemsUrl: string, prefix: string): Promise<number[]> {
+  const escapedPrefix = prefix.replace(/'/g, "''");
+  // Traemos solo el campo No de todos los artículos con ese prefijo (todas
+  // las páginas, vía fetchODataEntities) para poder detectar huecos.
+  const query = `?$select=No&$filter=startswith(No,'${escapedPrefix}')`;
+  const entities = await fetchODataEntities(itemsUrl, query);
+
+  const numbers: number[] = [];
+  for (const entity of entities) {
+    const no = entity.No as string;
+    const suffix = no.substring(prefix.length);
+    if (FOUR_DIGIT_SUFFIX.test(suffix)) {
+      numbers.push(parseInt(suffix, 10));
+    }
   }
-  const json: any = await res.json();
-  if (Array.isArray(json.value) && json.value.length > 0) {
-    return json.value[0].No as string;
-  }
-  return null;
+  return numbers;
 }
 
-/** Calcula el siguiente número correlativo (prefijo + 4 dígitos) para un prefijo dado. */
+/**
+ * Calcula el siguiente número correlativo (prefijo + 4 dígitos) para un
+ * prefijo dado, RELLENANDO HUECOS: si existen GCAB0001..GCAB0041 y luego
+ * GCAB0043 (falta GCAB0042 porque se codificó mal en su día), el siguiente
+ * alta con prefijo GCAB ocupa GCAB0042 en vez de continuar por GCAB0044.
+ * Si no hay huecos, continúa con el siguiente número tras el máximo.
+ */
 export async function computeNextNo(itemsUrl: string, prefix: string): Promise<string> {
-  const lastNo = await getLastNoWithPrefix(itemsUrl, prefix);
+  const used = new Set(await getUsedNumbersWithPrefix(itemsUrl, prefix));
   let next = 1;
-  if (lastNo) {
-    const numPart = lastNo.substring(prefix.length);
-    const parsed = parseInt(numPart, 10);
-    if (!Number.isNaN(parsed)) next = parsed + 1;
-  }
+  while (used.has(next)) next++;
   return `${prefix}${String(next).padStart(4, '0')}`;
 }
