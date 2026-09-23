@@ -77,16 +77,23 @@ const ProductForm: React.FC<ProductFormProps> = ({
         ...externalProducts.map(p => p.no)
       ];
 
-      const matching = allExistingNumbers.filter(no => no.startsWith(prefix));
-      let nextNumber = 1;
+      // El correlativo debe tener EXACTAMENTE 4 dígitos. Un código con el
+      // prefijo correcto pero 3 o 5 dígitos está mal codificado (creado a
+      // mano) y se ignora: no cuenta ni bloquea el hueco que ocupa.
+      const FOUR_DIGIT_SUFFIX = /^\d{4}$/;
+      const usedNumbers = new Set(
+        allExistingNumbers
+          .filter(no => no.startsWith(prefix))
+          .map(no => no.substring(prefix.length))
+          .filter(suffix => FOUR_DIGIT_SUFFIX.test(suffix))
+          .map(suffix => parseInt(suffix, 10))
+      );
 
-      if (matching.length > 0) {
-        const numbers = matching.map(no => {
-          const numPart = no.substring(prefix.length);
-          return parseInt(numPart, 10) || 0;
-        });
-        nextNumber = Math.max(...numbers) + 1;
-      }
+      // Rellenamos huecos: si falta un número intermedio en la secuencia
+      // (p.ej. existe GCAB0041 y GCAB0043 pero no GCAB0042), se asigna ese
+      // hueco en vez de continuar por el siguiente al máximo.
+      let nextNumber = 1;
+      while (usedNumbers.has(nextNumber)) nextNumber++;
 
       const formattedNumber = nextNumber.toString().padStart(4, '0');
       setFormData(prev => ({ ...prev, no: `${prefix}${formattedNumber}` }));
