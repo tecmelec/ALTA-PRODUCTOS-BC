@@ -19,6 +19,10 @@ interface ProductFormProps {
   categories: ItemCategory[];
   units: string[];
   isAdmin: boolean;
+  // true mientras la creación (onSave) está en curso: bloquea el botón
+  // "Crear Producto" para evitar un doble envío (doble clic, doble tap...)
+  // que dispararía dos peticiones de alta casi simultáneas.
+  isSaving?: boolean;
 }
 
 interface GroundingSource {
@@ -37,7 +41,8 @@ const ProductForm: React.FC<ProductFormProps> = ({
   manufacturers,
   categories,
   units,
-  isAdmin
+  isAdmin,
+  isSaving = false
 }) => {
   const [step, setStep] = useState(1);
   const [isSuggesting, setIsSuggesting] = useState(false);
@@ -152,6 +157,11 @@ const ProductForm: React.FC<ProductFormProps> = ({
 
 
   const validateAndSave = () => {
+    // Bloqueo extra por si el botón llega a recibir un segundo clic antes
+    // de que el padre termine de propagar isSaving=true (ventana de una
+    // fracción de segundo entre el primer clic y el re-render).
+    if (isSaving) return;
+
     const desc = formData.description?.trim();
     if (!desc) return;
 
@@ -436,11 +446,16 @@ const ProductForm: React.FC<ProductFormProps> = ({
           </div>
 
           <div className="flex justify-between col-span-full mt-6 border-t pt-4">
-            <button onClick={() => setStep(2)} className="px-6 py-2 border border-gray-300 rounded text-gray-600 hover:bg-gray-50">Atrás</button>
+            <button onClick={() => setStep(2)} disabled={isSaving} className="px-6 py-2 border border-gray-300 rounded text-gray-600 hover:bg-gray-50 disabled:opacity-50">Atrás</button>
             <div className="space-x-4">
-                <button onClick={onCancel} className="px-6 py-2 text-red-600 hover:bg-red-50 rounded">Cancelar</button>
-                <button onClick={validateAndSave} disabled={!isDescriptionValid} className="px-8 py-2 bg-blue-600 text-white font-bold rounded shadow-lg hover:bg-blue-700 disabled:opacity-50">
-                  Crear Producto
+                <button onClick={onCancel} disabled={isSaving} className="px-6 py-2 text-red-600 hover:bg-red-50 rounded disabled:opacity-50">Cancelar</button>
+                <button
+                  onClick={validateAndSave}
+                  disabled={!isDescriptionValid || isSaving}
+                  className="px-8 py-2 bg-blue-600 text-white font-bold rounded shadow-lg hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-2"
+                >
+                  {isSaving && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+                  {isSaving ? 'Creando...' : 'Crear Producto'}
                 </button>
             </div>
           </div>
