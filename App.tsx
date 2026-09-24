@@ -176,6 +176,8 @@ const App: React.FC = () => {
           await loadSharedData();
           if (created.dimensionWarning) {
             alert(`Producto ${created.no} creado, pero atención:\n\n${created.dimensionWarning}\n\nRevísalo manualmente en Business Central.`);
+          } else {
+            alert(`✅ Artículo creado correctamente.\n\nCódigo asignado: ${created.no}`);
           }
         } catch (err: any) {
           alert(`Error al crear el producto en Business Central: ${err.message}`);
@@ -183,6 +185,7 @@ const App: React.FC = () => {
         }
       } else {
         setProducts(prev => [newProduct, ...prev]);
+        alert(`✅ Artículo creado correctamente.\n\nCódigo asignado: ${newProduct.no}`);
       }
       setIsModalOpen(false);
     } finally {
