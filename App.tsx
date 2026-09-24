@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Product, UserRole, AppSettings, ExternalProduct, Manufacturer, ItemCategory, BCConfig } from './types';
 import Modal from './components/Modal';
 import ProductForm from './components/ProductForm';
@@ -53,6 +53,12 @@ const App: React.FC = () => {
     return parsed;
   });
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSavingProduct, setIsSavingProduct] = useState(false);
+  // Bloqueo síncrono (además del estado de React, que solo se aplica tras
+  // el siguiente render): evita que dos clics casi simultáneos sobre
+  // "Crear Producto" disparen dos altas a la vez, cada una calculando su
+  // propio "siguiente hueco libre" y creando así dos productos distintos.
+  const isSavingProductRef = useRef(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -143,32 +149,46 @@ const App: React.FC = () => {
   const userPerms = settings.permissions[currentUser];
 
   const handleAddProduct = async (newProduct: Product) => {
-    if (apiConfigured) {
-      try {
-        const created = await api.createProduct({
-          type: newProduct.type,
-          description: newProduct.description,
-          itemCategoryCode: newProduct.itemCategoryCode,
-          manufacturerCode: newProduct.manufacturerCode,
-          baseUnitOfMeasure: newProduct.baseUnitOfMeasure,
-          unitPrice: newProduct.unitPrice,
-          unitCost: newProduct.unitCost,
-          inventoryPostingGroup: newProduct.inventoryPostingGroup,
-          genProdPostingGroup: newProduct.genProdPostingGroup,
-          vatProdPostingGroup: newProduct.vatProdPostingGroup,
-        });
-        await loadSharedData();
-        if (created.dimensionWarning) {
-          alert(`Producto ${created.no} creado, pero atención:\n\n${created.dimensionWarning}\n\nRevísalo manualmente en Business Central.`);
+    // Si ya hay un alta en curso, ignoramos cualquier llamada adicional
+    // (doble clic, doble tap, o el evento disparándose dos veces). El ref
+    // se comprueba y fija de forma síncrona, sin esperar a un re-render,
+    // así que cubre la fracción de segundo entre el primer clic y el
+    // momento en que el botón queda realmente deshabilitado.
+    if (isSavingProductRef.current) return;
+    isSavingProductRef.current = true;
+    setIsSavingProduct(true);
+
+    try {
+      if (apiConfigured) {
+        try {
+          const created = await api.createProduct({
+            type: newProduct.type,
+            description: newProduct.description,
+            itemCategoryCode: newProduct.itemCategoryCode,
+            manufacturerCode: newProduct.manufacturerCode,
+            baseUnitOfMeasure: newProduct.baseUnitOfMeasure,
+            unitPrice: newProduct.unitPrice,
+            unitCost: newProduct.unitCost,
+            inventoryPostingGroup: newProduct.inventoryPostingGroup,
+            genProdPostingGroup: newProduct.genProdPostingGroup,
+            vatProdPostingGroup: newProduct.vatProdPostingGroup,
+          });
+          await loadSharedData();
+          if (created.dimensionWarning) {
+            alert(`Producto ${created.no} creado, pero atención:\n\n${created.dimensionWarning}\n\nRevísalo manualmente en Business Central.`);
+          }
+        } catch (err: any) {
+          alert(`Error al crear el producto en Business Central: ${err.message}`);
+          return;
         }
-      } catch (err: any) {
-        alert(`Error al crear el producto en Business Central: ${err.message}`);
-        return;
+      } else {
+        setProducts(prev => [newProduct, ...prev]);
       }
-    } else {
-      setProducts(prev => [newProduct, ...prev]);
+      setIsModalOpen(false);
+    } finally {
+      isSavingProductRef.current = false;
+      setIsSavingProduct(false);
     }
-    setIsModalOpen(false);
   };
 
   const handleBulkManufacturers = (newManufacturers: Manufacturer[]) => {
@@ -372,6 +392,7 @@ const App: React.FC = () => {
           categories={settings.categories}
           units={settings.unitsOfMeasure}
           isAdmin={currentUser === UserRole.ADMIN}
+          isSaving={isSavingProduct}
         />
       </Modal>
     </div>
