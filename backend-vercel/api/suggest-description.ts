@@ -87,6 +87,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const apiKey = requireEnv('GEMINI_API_KEY');
     const ai = new GoogleGenAI({ apiKey });
 
+    // Token que le pedimos a Gemini que devuelva EXACTAMENTE cuando la
+    // información encontrada no corresponde al producto, en vez de una
+    // frase en prosa. Así el backend puede distinguir con certeza "no hay
+    // descripción válida" de "aquí tienes la descripción", en vez de tener
+    // que adivinarlo con heurísticas sobre texto libre.
+    const NO_MATCH_TOKEN = 'SIN_COINCIDENCIA';
+
     const aiResponse = await ai.models.generateContent({
       model: 'gemini-3.6-flash',
       contents: `A partir de esta información encontrada en la web sobre el producto del fabricante "${manufacturerName ?? ''}" con referencia "${manufacturerRef}", redacta la descripción en formato ERP.
@@ -99,8 +106,8 @@ REGLAS DE FORMATO ERP:
 3. TODO EN MAYÚSCULAS.
 4. ELIMINA la referencia del fabricante ("REF. XXXX") si aparece al final.
 5. NO uses artículos (EL, LA, LOS) ni introducciones.
-6. Si la información no parece corresponder realmente a este producto, indícalo claramente en vez de inventar.
-7. Devuelve ÚNICAMENTE el texto de la descripción (o el aviso del punto 6).`,
+6. Si la información no parece corresponder realmente a este producto, o no incluye datos técnicos ni descriptivos útiles sobre él, NO escribas ninguna explicación: responde ÚNICAMENTE con la palabra ${NO_MATCH_TOKEN}.
+7. Devuelve ÚNICAMENTE el texto de la descripción (o el token del punto 6), sin nada más.`,
       config: {
         // Gemini 3.x usa "thinkingLevel" (no "thinkingBudget", que es de la
         // familia 2.5). LOW acelera mucho la respuesta para una tarea tan
@@ -109,9 +116,28 @@ REGLAS DE FORMATO ERP:
       },
     });
 
-    const description = aiResponse.text?.trim().toUpperCase() ?? '';
+    const rawText = aiResponse.text?.trim() ?? '';
     const sources = results.map(r => ({ title: r.title, uri: r.url }));
 
+    // Defensa en profundidad: además del token explícito, detectamos si el
+    // modelo escribió una explicación en prosa en vez de seguir la regla 6
+    // (los LLM no siempre obedecen el formato al 100%), para no acabar
+    // metiendo una frase de "no encontré nada" en el campo de descripción.
+    const looksLikeRefusal =
+      !rawText ||
+      rawText.toUpperCase().includes(NO_MATCH_TOKEN) ||
+      /^(LA |EL |NO |LA INFORMACI[OÓ]N|INFORMACI[OÓ]N (PROPORCIONADA|ENCONTRADA))/i.test(rawText) &&
+        /no (contiene|parece|corresponde|incluye|se encontr[oó])/i.test(rawText);
+
+    if (looksLikeRefusal) {
+      return res.status(200).json({
+        description: '',
+        sources,
+        warning: 'La información encontrada en la web no parece corresponder a este producto (o no trae datos técnicos útiles). Completa la descripción manualmente.',
+      });
+    }
+
+    const description = rawText.toUpperCase();
     return res.status(200).json({ description, sources });
   } catch (err: any) {
     console.error(err);
