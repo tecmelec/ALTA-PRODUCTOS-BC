@@ -113,14 +113,14 @@ export const api = {
   async suggestDescription(
     manufacturerName: string,
     manufacturerRef: string
-  ): Promise<{ description: string; sources: { title: string; uri: string }[] }> {
+  ): Promise<{ description: string; sources: { title: string; uri: string }[]; warning?: string }> {
     const attempt = async () => {
       const res = await fetch(apiUrl('/api/suggest-description'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ manufacturerName, manufacturerRef }),
       });
-      return handle<{ description: string; sources: { title: string; uri: string }[] }>(res);
+      return handle<{ description: string; sources: { title: string; uri: string }[]; warning?: string }>(res);
     };
 
     try {
