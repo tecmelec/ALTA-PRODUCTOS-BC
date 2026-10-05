@@ -123,6 +123,13 @@ REGLAS DE FORMATO ERP:
     if (/API_KEY_INVALID|Requested entity was not found|401|Unauthorized/i.test(message)) {
       return res.status(401).json({ error: 'Alguna de las claves configuradas (Tavily o Gemini) no es válida.' });
     }
+    // Gemini saturado momentáneamente (pico de demanda): no es un fallo de
+    // configuración ni de cuota, así que lo distinguimos para que el
+    // frontend pueda mostrar un mensaje claro (y un botón de reintentar)
+    // en vez de volcar el JSON crudo del error.
+    if (/503|UNAVAILABLE|overloaded|high demand/i.test(message)) {
+      return res.status(503).json({ error: 'El modelo de IA está saturado en este momento. Inténtalo de nuevo en unos segundos.' });
+    }
     return res.status(500).json({ error: message });
   }
 }
