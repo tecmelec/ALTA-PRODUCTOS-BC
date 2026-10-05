@@ -9,7 +9,10 @@ interface TavilyResult {
   content: string;
 }
 
-async function tavilySearch(query: string, includeDomains?: string[]): Promise<TavilyResult[]> {
+async function tavilySearch(
+  query: string,
+  opts?: { includeDomains?: string[]; searchDepth?: 'basic' | 'advanced'; maxResults?: number }
+): Promise<TavilyResult[]> {
   const apiKey = requireEnv('TAVILY_API_KEY');
   const res = await fetch('https://api.tavily.com/search', {
     method: 'POST',
@@ -19,9 +22,9 @@ async function tavilySearch(query: string, includeDomains?: string[]): Promise<T
     },
     body: JSON.stringify({
       query,
-      search_depth: 'basic',
-      max_results: 3,
-      include_domains: includeDomains ?? [],
+      search_depth: opts?.searchDepth ?? 'basic',
+      max_results: opts?.maxResults ?? 3,
+      include_domains: opts?.includeDomains ?? [],
     }),
   });
 
@@ -32,6 +35,23 @@ async function tavilySearch(query: string, includeDomains?: string[]): Promise<T
 
   const json: any = await res.json();
   return (json.results ?? []) as TavilyResult[];
+}
+
+// Compara ignorando mayúsculas/minúsculas y separadores (espacios, guiones,
+// puntos): referencias de fabricante se escriben de formas distintas según
+// la fuente ("420007", "420-007", "420 007"...).
+function normalizeRef(value: string): string {
+  return value.toLowerCase().replace(/[\s\-_.]/g, '');
+}
+
+function mentionsRef(result: TavilyResult, ref: string): boolean {
+  const needle = normalizeRef(ref);
+  if (!needle) return false;
+  return (
+    normalizeRef(result.title).includes(needle) ||
+    normalizeRef(result.content).includes(needle) ||
+    normalizeRef(result.url).includes(needle)
+  );
 }
 
 /**
@@ -57,21 +77,47 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'Falta la referencia del fabricante' });
   }
 
-  const query = `${manufacturerName ?? ''} ${manufacturerRef}`.trim();
+  // La referencia entre comillas refuerza la coincidencia exacta de frase
+  // en la búsqueda (en vez de que el motor la trate como palabras sueltas).
+  const query = `${manufacturerName ?? ''} "${manufacturerRef}"`.trim();
 
   try {
-    // Lanzamos ambas búsquedas en paralelo (en vez de esperar a que la
-    // primera falle) para reducir el tiempo total y evitar el límite de
-    // 10s del plan gratuito de Vercel.
+    // matmax.es bloquea en su robots.txt la página de resultados de
+    // búsqueda (/buscar*), así que ningún buscador puede indexar ESA
+    // página; solo las fichas de producto individuales (/productos-*, que
+    // sí están permitidas). Por eso reforzamos aquí: 'advanced' (mejor
+    // ranking semántico) y más resultados en matmax, para tener más
+    // posibilidades de dar con la ficha concreta del producto. Vercel nos
+    // da 60s (ver vercel.json), así que hay margen de sobra para esto.
     const [matmaxSettled, generalSettled] = await Promise.allSettled([
-      tavilySearch(query, ['matmax.es']),
-      tavilySearch(query),
+      tavilySearch(query, { includeDomains: ['matmax.es'], searchDepth: 'advanced', maxResults: 5 }),
+      tavilySearch(query, { searchDepth: 'advanced', maxResults: 5 }),
     ]);
     const matmaxResults = matmaxSettled.status === 'fulfilled' ? matmaxSettled.value : [];
     const generalResults = generalSettled.status === 'fulfilled' ? generalSettled.value : [];
-    const results = (matmaxResults.length > 0 ? matmaxResults : generalResults).slice(0, 2);
 
-    if (results.length === 0) {
+    // Unimos ambas listas (matmax primero) y quitamos duplicados por URL.
+    const seenUrls = new Set<string>();
+    const merged: TavilyResult[] = [];
+    for (const r of [...matmaxResults, ...generalResults]) {
+      if (seenUrls.has(r.url)) continue;
+      seenUrls.add(r.url);
+      merged.push(r);
+    }
+
+    // Priorizamos los resultados que de verdad mencionan la referencia
+    // exacta (en título, URL o contenido): antes, cuando matmax devolvía
+    // *algún* resultado aunque no fuera el correcto (p.ej. productos de
+    // otra marca que simplemente comparten palabras de la búsqueda), esos
+    // resultados irrelevantes tapaban cualquier coincidencia real que
+    // hubiera en la búsqueda general. Ahora, si algún resultado (de
+    // cualquiera de las dos búsquedas) sí contiene la referencia, solo esos
+    // pasan a Gemini; si ninguno la contiene, seguimos con los mejores
+    // resultados disponibles como aproximación.
+    const withRefMatch = merged.filter(r => mentionsRef(r, manufacturerRef));
+    const candidates = (withRefMatch.length > 0 ? withRefMatch : merged).slice(0, 3);
+
+    if (candidates.length === 0) {
       return res.status(200).json({
         description: '',
         sources: [],
@@ -79,7 +125,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    const MAX_CONTENT_CHARS = 500; // recortamos para que Gemini responda más rápido
+    const results = candidates;
+    const MAX_CONTENT_CHARS = 800; // con 60s de margen podemos dar más contexto a Gemini
     const context = results
       .map((r, i) => `Fuente ${i + 1} (${r.url}):\n${r.title}\n${r.content.slice(0, MAX_CONTENT_CHARS)}`)
       .join('\n\n');
@@ -94,9 +141,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // que adivinarlo con heurísticas sobre texto libre.
     const NO_MATCH_TOKEN = 'SIN_COINCIDENCIA';
 
+    const refConfirmed = withRefMatch.length > 0;
+
     const aiResponse = await ai.models.generateContent({
       model: 'gemini-3.6-flash',
       contents: `A partir de esta información encontrada en la web sobre el producto del fabricante "${manufacturerName ?? ''}" con referencia "${manufacturerRef}", redacta la descripción en formato ERP.
+
+${
+  refConfirmed
+    ? `(Las fuentes de abajo ya se filtraron para quedarte solo con las que mencionan literalmente la referencia "${manufacturerRef}", así que corresponden a este producto con alta confianza: úsalas con normalidad.)`
+    : `(Ninguna fuente disponible menciona literalmente la referencia "${manufacturerRef}"; son el mejor resultado que se encontró, pero podrían no ser este producto exacto. Si no estás razonablemente seguro de que describen este producto, usa la regla 6.)`
+}
 
 ${context}
 
