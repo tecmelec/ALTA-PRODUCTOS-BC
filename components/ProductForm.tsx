@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { api } from '../api';
+import { api, isApiConfigured } from '../api';
 import { 
   ProductType, 
   CostingMethod, 
@@ -67,6 +67,42 @@ const ProductForm: React.FC<ProductFormProps> = ({
   const [manufacturerRef, setManufacturerRef] = useState('');
   const [descriptionTouched, setDescriptionTouched] = useState(false);
   const [categoryTouched, setCategoryTouched] = useState(false);
+
+  // Resultado de buscar la referencia del fabricante contra TODO el
+  // catálogo (vía backend/Supabase), no solo contra los productos que ya
+  // estaban cargados en la pantalla principal. Sin esto, la comprobación
+  // de "referencia duplicada" solo detectaba el duplicado si el usuario
+  // ya había buscado esa referencia antes en la pantalla principal.
+  const [refSearchResults, setRefSearchResults] = useState<Product[]>([]);
+  const [isCheckingRef, setIsCheckingRef] = useState(false);
+
+  useEffect(() => {
+    if (formData.type !== ProductType.FABRICANTE || manufacturerRef.trim().length < 3 || !isApiConfigured()) {
+      setRefSearchResults([]);
+      return;
+    }
+
+    let cancelled = false;
+    setIsCheckingRef(true);
+    const timeout = setTimeout(async () => {
+      try {
+        const results = await api.getProducts({ search: manufacturerRef.trim(), limit: 50 });
+        if (!cancelled) setRefSearchResults(results);
+      } catch {
+        // Si falla la búsqueda en vivo, no bloqueamos el flujo: se mantiene
+        // la comprobación local (existingProducts/externalProducts) como
+        // respaldo.
+        if (!cancelled) setRefSearchResults([]);
+      } finally {
+        if (!cancelled) setIsCheckingRef(false);
+      }
+    }, 400); // debounce: evita lanzar una búsqueda en cada pulsación
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+    };
+  }, [manufacturerRef, formData.type]);
 
   useEffect(() => {
     let prefix = '';
@@ -203,12 +239,18 @@ const ProductForm: React.FC<ProductFormProps> = ({
   const checkDuplicateRef = () => {
     if (formData.type !== ProductType.FABRICANTE || !manufacturerRef) return false;
     const searchStr = `REF. ${manufacturerRef.toUpperCase()}`;
-    const inExisting = existingProducts.some(p => 
-      p.description.toUpperCase().includes(searchStr) || 
+    const inExisting = existingProducts.some(p =>
+      p.description.toUpperCase().includes(searchStr) ||
       (p.manufacturerRef && p.manufacturerRef.toUpperCase() === manufacturerRef.toUpperCase())
     );
     const inExternal = externalProducts.some(p => p.description.toUpperCase().includes(searchStr));
-    return inExisting || inExternal;
+    // Comprobación contra TODO el catálogo (no solo lo ya cargado en la
+    // pantalla principal), resultado de la búsqueda en vivo de más arriba.
+    const inLiveSearch = refSearchResults.some(p =>
+      p.description.toUpperCase().includes(searchStr) ||
+      (p.manufacturerRef && p.manufacturerRef.toUpperCase() === manufacturerRef.toUpperCase())
+    );
+    return inExisting || inExternal || inLiveSearch;
   };
 
   const isDuplicateRef = checkDuplicateRef();
@@ -289,14 +331,22 @@ const ProductForm: React.FC<ProductFormProps> = ({
           {formData.type === ProductType.FABRICANTE && (
             <div className="space-y-2 col-span-full">
               <label className="block text-sm font-semibold text-gray-600">Nro. de Referencia del Fabricante *</label>
-              <input
-                type="text"
-                value={manufacturerRef}
-                onChange={(e) => setManufacturerRef(e.target.value.toUpperCase())}
-                placeholder="Ej: REF-12345"
-                className={`w-full p-2 border rounded focus:ring-2 outline-none transition-colors ${isDuplicateRef ? 'border-red-500 bg-red-50 focus:ring-red-200' : 'border-gray-300 focus:ring-blue-500'}`}
-                required
-              />
+              <div className="relative">
+                <input
+                  type="text"
+                  value={manufacturerRef}
+                  onChange={(e) => setManufacturerRef(e.target.value.toUpperCase())}
+                  placeholder="Ej: REF-12345"
+                  className={`w-full p-2 border rounded focus:ring-2 outline-none transition-colors ${isDuplicateRef ? 'border-red-500 bg-red-50 focus:ring-red-200' : 'border-gray-300 focus:ring-blue-500'}`}
+                  required
+                />
+                {isCheckingRef && (
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                )}
+              </div>
+              {isCheckingRef && (
+                <p className="text-[10px] text-gray-400">Comprobando referencia en todo el maestro...</p>
+              )}
               {isDuplicateRef && (
                 <div className="bg-red-100 border-l-4 border-red-500 p-2 mt-2">
                   <p className="text-xs text-red-700 font-bold uppercase">
@@ -319,12 +369,12 @@ const ProductForm: React.FC<ProductFormProps> = ({
 
           <div className="flex justify-between col-span-full mt-4">
             <button onClick={() => setStep(1)} className="px-6 py-2 border border-gray-300 rounded text-gray-600 hover:bg-gray-50">Atrás</button>
-            <button 
-              onClick={() => setStep(3)} 
-              disabled={!formData.no || !isCategoryValid || !isManufacturerValid || !isRefValid}
+            <button
+              onClick={() => setStep(3)}
+              disabled={!formData.no || !isCategoryValid || !isManufacturerValid || !isRefValid || isCheckingRef}
               className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 transition-all font-bold"
             >
-              Siguiente
+              {isCheckingRef ? 'Comprobando...' : 'Siguiente'}
             </button>
           </div>
         </div>
