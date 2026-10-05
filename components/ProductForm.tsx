@@ -52,6 +52,11 @@ const ProductForm: React.FC<ProductFormProps> = ({
   // muestra como aviso con botón de reintentar, no como alert() con el
   // JSON crudo del error.
   const [aiOverloaded, setAiOverloaded] = useState(false);
+  // Aviso cuando la IA respondió correctamente pero sin una descripción
+  // aprovechable (no encontró el producto en la web, o lo encontrado no
+  // corresponde realmente a esta referencia). Antes esto se perdía en
+  // silencio: el campo quedaba vacío sin que el usuario supiera por qué.
+  const [aiWarning, setAiWarning] = useState('');
   
   const [formData, setFormData] = useState<Partial<Product>>({
     type: ProductType.FABRICANTE,
@@ -166,6 +171,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
     setGroundingSources([]);
     setQuotaExceeded(false);
     setAiOverloaded(false);
+    setAiWarning('');
 
     try {
       const result = await api.suggestDescription(manufacturerName, manufacturerRef);
@@ -180,6 +186,10 @@ const ProductForm: React.FC<ProductFormProps> = ({
           suggested = suggested.trim();
         }
         setFormData(prev => ({ ...prev, description: suggested }));
+      } else if (result.warning) {
+        // La IA no devolvió una descripción aprovechable: lo avisamos en
+        // vez de dejar el campo vacío sin explicación.
+        setAiWarning(result.warning);
       }
       if (result.sources?.length) {
         setGroundingSources(result.sources);
@@ -475,6 +485,24 @@ const ProductForm: React.FC<ProductFormProps> = ({
                         Reintentar
                       </button>
                     </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Aviso cuando la IA respondió pero no encontró una descripción
+                aprovechable (sin resultados, o la info no corresponde al producto) */}
+            {aiWarning && (
+              <div className="mt-3 p-4 bg-blue-50 border border-blue-200 rounded-lg animate-in fade-in zoom-in duration-300">
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5">
+                    <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-bold text-blue-800">No se pudo sugerir una descripción</p>
+                    <p className="text-xs text-blue-700 mt-1">{aiWarning}</p>
                   </div>
                 </div>
               </div>
