@@ -48,6 +48,10 @@ const ProductForm: React.FC<ProductFormProps> = ({
   const [isSuggesting, setIsSuggesting] = useState(false);
   const [groundingSources, setGroundingSources] = useState<GroundingSource[]>([]);
   const [quotaExceeded, setQuotaExceeded] = useState(false);
+  // Gemini saturado momentáneamente (pico de demanda, HTTP 503): se
+  // muestra como aviso con botón de reintentar, no como alert() con el
+  // JSON crudo del error.
+  const [aiOverloaded, setAiOverloaded] = useState(false);
   
   const [formData, setFormData] = useState<Partial<Product>>({
     type: ProductType.FABRICANTE,
@@ -161,6 +165,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
     setIsSuggesting(true);
     setGroundingSources([]);
     setQuotaExceeded(false);
+    setAiOverloaded(false);
 
     try {
       const result = await api.suggestDescription(manufacturerName, manufacturerRef);
@@ -183,6 +188,8 @@ const ProductForm: React.FC<ProductFormProps> = ({
       const errorMsg: string = error?.message || '';
       if (/cuota|quota|429/i.test(errorMsg)) {
         setQuotaExceeded(true);
+      } else if (/503|saturad|UNAVAILABLE|overloaded|high demand/i.test(errorMsg)) {
+        setAiOverloaded(true);
       } else {
         alert(`Error al consultar la IA: ${errorMsg || 'Error desconocido'}`);
       }
@@ -446,7 +453,33 @@ const ProductForm: React.FC<ProductFormProps> = ({
                 </div>
               </div>
             )}
-            
+
+            {/* Aviso de modelo de IA saturado (503, pico de demanda temporal) */}
+            {aiOverloaded && (
+              <div className="mt-3 p-4 bg-amber-50 border border-amber-200 rounded-lg animate-in fade-in zoom-in duration-300">
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5">
+                    <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-bold text-amber-800">El asistente de IA está saturado</p>
+                    <p className="text-xs text-amber-700 mt-1">Hay mucha demanda en este momento; suele ser cuestión de segundos. Puedes reintentar o escribir la descripción a mano.</p>
+                    <div className="mt-3 flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={handleSuggestDescription}
+                        className="text-[10px] bg-amber-100 hover:bg-amber-200 text-amber-800 font-bold px-3 py-1.5 rounded transition-colors"
+                      >
+                        Reintentar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Visualización de Grounding Sources */}
             {groundingSources.length > 0 && (
               <div className="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
