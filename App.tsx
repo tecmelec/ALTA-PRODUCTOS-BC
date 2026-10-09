@@ -6,6 +6,7 @@ import ProductForm from './components/ProductForm';
 import Settings from './components/Settings';
 import ExternalProducts from './components/ExternalProducts';
 import ReferenceInspection from './components/ReferenceInspection';
+import BulkCreate from './components/BulkCreate';
 import { ITEM_CATEGORIES, MANUFACTURERS, UNITS_OF_MEASURE, filterHiddenCategories } from './constants';
 import { api, isApiConfigured } from './api';
 
@@ -32,7 +33,7 @@ const DEFAULT_SETTINGS: AppSettings = {
 
 const App: React.FC = () => {
   const apiConfigured = isApiConfigured();
-  const [activeView, setActiveView] = useState<'products' | 'bc' | 'inspection' | 'settings'>('products');
+  const [activeView, setActiveView] = useState<'products' | 'bc' | 'inspection' | 'bulk' | 'settings'>('products');
   const [currentUser, setCurrentUser] = useState<UserRole>(UserRole.ADMIN);
   const [products, setProducts] = useState<Product[]>(() => {
     if (apiConfigured) return [];
@@ -176,8 +177,6 @@ const App: React.FC = () => {
           await loadSharedData();
           if (created.dimensionWarning) {
             alert(`Producto ${created.no} creado, pero atención:\n\n${created.dimensionWarning}\n\nRevísalo manualmente en Business Central.`);
-          } else {
-            alert(`✅ Artículo creado correctamente.\n\nCódigo asignado: ${created.no}`);
           }
         } catch (err: any) {
           alert(`Error al crear el producto en Business Central: ${err.message}`);
@@ -185,7 +184,6 @@ const App: React.FC = () => {
         }
       } else {
         setProducts(prev => [newProduct, ...prev]);
-        alert(`✅ Artículo creado correctamente.\n\nCódigo asignado: ${newProduct.no}`);
       }
       setIsModalOpen(false);
     } finally {
@@ -217,6 +215,7 @@ const App: React.FC = () => {
               const role = e.target.value as UserRole;
               setCurrentUser(role);
               if (!settings.permissions[role].canManageMasterData && activeView === 'settings') setActiveView('products');
+              if (!settings.permissions[role].canCreateProduct && activeView === 'bulk') setActiveView('products');
             }}
             className="bg-gray-700 text-white border-none text-[10px] rounded focus:ring-0"
           >
@@ -237,6 +236,9 @@ const App: React.FC = () => {
               <button onClick={() => setActiveView('products')} className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${activeView === 'products' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Productos</button>
               <button onClick={() => setActiveView('bc')} className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${activeView === 'bc' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Productos BC</button>
               <button onClick={() => setActiveView('inspection')} className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${activeView === 'inspection' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Inspección</button>
+              {userPerms.canCreateProduct && (
+                <button onClick={() => setActiveView('bulk')} className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${activeView === 'bulk' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Alta masiva</button>
+              )}
               {userPerms.canManageMasterData && (
                 <button onClick={() => setActiveView('settings')} className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${activeView === 'settings' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Configuración</button>
               )}
@@ -373,6 +375,17 @@ const App: React.FC = () => {
         )}
 
         {activeView === 'inspection' && <ReferenceInspection products={products} externalProducts={externalProducts} />}
+
+        {activeView === 'bulk' && userPerms.canCreateProduct && (
+          <BulkCreate
+            manufacturers={settings.manufacturers}
+            categories={settings.categories}
+            units={settings.unitsOfMeasure}
+            externalProducts={externalProducts}
+            apiConfigured={apiConfigured}
+            onFinished={() => loadSharedData(searchTerm)}
+          />
+        )}
 
         {activeView === 'settings' && (
           <Settings
