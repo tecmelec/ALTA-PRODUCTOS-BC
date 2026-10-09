@@ -374,7 +374,7 @@ const App: React.FC = () => {
           />
         )}
 
-        {activeView === 'inspection' && <ReferenceInspection products={products} externalProducts={externalProducts} />}
+        {activeView === 'inspection' && <ReferenceInspection products={products} externalProducts={externalProducts} apiConfigured={apiConfigured} />}
 
         {activeView === 'bulk' && userPerms.canCreateProduct && (
           <BulkCreate
