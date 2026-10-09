@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api';
+import { findProductsByRef } from '../referenceSearch';
 import { ExternalProduct, ItemCategory, Manufacturer, ProductType } from '../types';
 
 interface BulkCreateProps {
@@ -132,14 +133,6 @@ function parseClipboardTable(text: string): string[][] {
 
 const clean = (s: string | undefined) => (s ?? '').replace(/\s+/g, ' ').trim().toUpperCase();
 
-const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-/**
- * "REF. X" seguido de fin de texto, espacio o puntuación de cierre. Así
- * "ABC1" no coincide con "ABC12" ni con "ABC1-B", que son otras referencias.
- */
-const refPattern = (ref: string) => new RegExp(`REF\\.\\s*${escapeRegExp(ref)}(?=$|[\\s,;)])`, 'i');
-
 /**
  * Descripción final que se envía a BC: descripción + " REF. <ref>", con
  * el mismo recorte que el alta individual (se recorta la descripción por
@@ -156,23 +149,6 @@ function buildFinalDescription(description: string, reference: string): string {
     desc = desc.trim();
   }
   return desc.endsWith(refSuffix.trim()) ? desc : `${desc}${refSuffix}`;
-}
-
-/** Busca en el catálogo completo (réplica de Supabase) artículos con esa referencia. */
-async function findExistingCodes(ref: string, externalProducts: ExternalProduct[]): Promise<string[]> {
-  const pattern = refPattern(ref);
-  const search = `REF. ${ref}`.replace(/[%_"\\]/g, ' ');
-  const results = await api.getProducts({ search, limit: 1000 });
-  const codes = new Set<string>();
-  for (const p of results) {
-    if (pattern.test(p.description) || (p.manufacturerRef && p.manufacturerRef.toUpperCase() === ref)) {
-      codes.add(p.no);
-    }
-  }
-  for (const p of externalProducts) {
-    if (pattern.test(p.description)) codes.add(p.no);
-  }
-  return [...codes];
 }
 
 let nextRowId = 1;
@@ -324,7 +300,8 @@ const BulkCreate: React.FC<BulkCreateProps> = ({
           const ref = queue.shift()!;
           let result: RefCheck;
           try {
-            const codes = await findExistingCodes(ref, externalProducts);
+            const matches = await findProductsByRef(ref, { apiConfigured, externalProducts });
+            const codes = matches.map((m) => m.no);
             result = codes.length > 0 ? { kind: 'exists', codes } : { kind: 'free' };
           } catch (err: any) {
             result = { kind: 'error', message: err?.message ?? 'Error al comprobar' };

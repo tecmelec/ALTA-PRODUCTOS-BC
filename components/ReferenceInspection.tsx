@@ -1,73 +1,83 @@
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Product, ExternalProduct } from '../types';
+import { findProductsByRef, runWithConcurrency, ReferenceMatch } from '../referenceSearch';
 
 interface ReferenceInspectionProps {
   products: Product[];
   externalProducts: ExternalProduct[];
+  apiConfigured: boolean;
 }
 
 interface InspectionResult {
   reference: string;
   exists: boolean;
-  matchNo?: string;
-  matchDescription?: string;
+  matches: ReferenceMatch[];
+  error?: string;
 }
 
-const ReferenceInspection: React.FC<ReferenceInspectionProps> = ({ products, externalProducts }) => {
+// Consultas simultáneas al catálogo completo.
+const CONCURRENCY = 4;
+
+const ReferenceInspection: React.FC<ReferenceInspectionProps> = ({ products, externalProducts, apiConfigured }) => {
   const [inputText, setInputText] = useState('');
   const [results, setResults] = useState<InspectionResult[]>([]);
   const [isInspected, setIsInspected] = useState(false);
+  const [isChecking, setIsChecking] = useState(false);
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
+  const runningRef = useRef(false);
 
-  const handleInspect = () => {
-    const lines = inputText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
-    const inspectionResults: InspectionResult[] = lines.map(ref => {
-      const upperRef = ref.toUpperCase();
-      const searchStr = `REF. ${upperRef}`;
+  const handleInspect = async () => {
+    if (runningRef.current) return;
 
-      // Buscar en locales
-      const localMatch = products.find(p => 
-        p.description.toUpperCase().includes(searchStr) || 
-        p.description.toUpperCase().includes(upperRef) ||
-        (p.manufacturerRef && p.manufacturerRef.toUpperCase() === upperRef)
+    // Una referencia por línea, sin repetir (respetando el orden pegado).
+    const lines: string[] = Array.from(
+      new Set<string>(
+        inputText
+          .split('\n')
+          .map((line) => line.trim().toUpperCase())
+          .filter((line) => line.length > 0),
+      ),
+    );
+    if (lines.length === 0) return;
+
+    runningRef.current = true;
+    setIsChecking(true);
+    setIsInspected(false);
+    setProgress({ done: 0, total: lines.length });
+
+    try {
+      // Se busca en el catálogo completo de BC (réplica en Supabase), no
+      // solo en los productos visibles en la pestaña Productos.
+      const inspectionResults = await runWithConcurrency(
+        lines,
+        CONCURRENCY,
+        async (ref): Promise<InspectionResult> => {
+          try {
+            const matches = await findProductsByRef(ref, {
+              apiConfigured,
+              localProducts: products,
+              externalProducts,
+              includeLoose: true,
+            });
+            return { reference: ref, exists: matches.length > 0, matches };
+          } catch (err: any) {
+            return { reference: ref, exists: false, matches: [], error: err?.message ?? 'Error al buscar' };
+          }
+        },
+        (done, total) => setProgress({ done, total }),
       );
-
-      if (localMatch) {
-        return {
-          reference: ref,
-          exists: true,
-          matchNo: localMatch.no,
-          matchDescription: localMatch.description
-        };
-      }
-
-      // Buscar en externos
-      const externalMatch = externalProducts.find(p => 
-        p.description.toUpperCase().includes(searchStr) ||
-        p.description.toUpperCase().includes(upperRef)
-      );
-
-      if (externalMatch) {
-        return {
-          reference: ref,
-          exists: true,
-          matchNo: externalMatch.no,
-          matchDescription: externalMatch.description
-        };
-      }
-
-      return {
-        reference: ref,
-        exists: false
-      };
-    });
-
-    setResults(inspectionResults);
-    setIsInspected(true);
+      setResults(inspectionResults);
+      setIsInspected(true);
+    } finally {
+      runningRef.current = false;
+      setIsChecking(false);
+    }
   };
 
   const foundCount = results.filter(r => r.exists).length;
-  const notFoundCount = results.length - foundCount;
+  const errorCount = results.filter(r => r.error).length;
+  const notFoundCount = results.length - foundCount - errorCount;
 
   return (
     <div className="space-y-6">
@@ -85,10 +95,10 @@ const ReferenceInspection: React.FC<ReferenceInspectionProps> = ({ products, ext
         <div className="mt-4 flex justify-end">
           <button
             onClick={handleInspect}
-            disabled={!inputText.trim()}
+            disabled={!inputText.trim() || isChecking}
             className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-2.5 rounded-lg font-bold shadow-lg transition-all disabled:opacity-50"
           >
-            Verificar Listado
+            {isChecking ? `Verificando ${progress.done} de ${progress.total}…` : 'Verificar Listado'}
           </button>
         </div>
       </div>
@@ -110,6 +120,11 @@ const ReferenceInspection: React.FC<ReferenceInspectionProps> = ({ products, ext
               <p className="text-2xl font-black text-red-700">{notFoundCount}</p>
             </div>
           </div>
+          {errorCount > 0 && (
+            <p className="text-sm text-amber-700">
+              {errorCount} referencias no se pudieron comprobar por un error de conexión. Vuelve a pulsar "Verificar Listado" para reintentarlo.
+            </p>
+          )}
 
           {/* Tabla de resultados */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
@@ -125,7 +140,9 @@ const ReferenceInspection: React.FC<ReferenceInspectionProps> = ({ products, ext
                 {results.map((res, idx) => (
                   <tr key={idx} className="hover:bg-gray-50">
                     <td className="px-6 py-4">
-                      {res.exists ? (
+                      {res.error ? (
+                        <span className="bg-amber-100 text-amber-700 text-[10px] font-black px-2 py-1 rounded-full uppercase" title={res.error}>Sin comprobar</span>
+                      ) : res.exists ? (
                         <span className="bg-green-100 text-green-700 text-[10px] font-black px-2 py-1 rounded-full uppercase">Existente</span>
                       ) : (
                         <span className="bg-red-100 text-red-700 text-[10px] font-black px-2 py-1 rounded-full uppercase">No Encontrado</span>
@@ -136,10 +153,26 @@ const ReferenceInspection: React.FC<ReferenceInspectionProps> = ({ products, ext
                     </td>
                     <td className="px-6 py-4">
                       {res.exists ? (
-                        <div>
-                          <p className="text-blue-600 font-bold text-xs">{res.matchNo}</p>
-                          <p className="text-[10px] text-gray-500 uppercase truncate max-w-xs">{res.matchDescription}</p>
+                        <div className="space-y-1.5">
+                          {res.matches.slice(0, 5).map((m) => (
+                            <div key={m.no}>
+                              <p className="text-blue-600 font-bold text-xs">
+                                {m.no}
+                                {!m.exact && (
+                                  <span className="ml-2 font-normal text-gray-400" title='La referencia aparece en la descripción, pero sin "REF." delante'>
+                                    (sin «REF.»)
+                                  </span>
+                                )}
+                              </p>
+                              <p className="text-[10px] text-gray-500 uppercase truncate max-w-md">{m.description}</p>
+                            </div>
+                          ))}
+                          {res.matches.length > 5 && (
+                            <p className="text-[10px] text-gray-400">y {res.matches.length - 5} más</p>
+                          )}
                         </div>
+                      ) : res.error ? (
+                        <span className="text-amber-700 text-xs">{res.error}</span>
                       ) : (
                         <span className="text-gray-300 text-xs">—</span>
                       )}
