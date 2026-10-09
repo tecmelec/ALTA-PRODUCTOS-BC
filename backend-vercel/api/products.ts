@@ -54,6 +54,25 @@ async function assignDefaultDimension(no: string): Promise<void> {
 
 const MAX_RETRIES = 3;
 
+// Máximo de palabras que se tienen en cuenta en una búsqueda (cada una
+// añade un filtro a la consulta; más de esto no aporta nada real).
+const MAX_SEARCH_TOKENS = 8;
+
+/**
+ * Trocea el texto del buscador en palabras independientes.
+ * - Separa por espacios y por "*" (compatibilidad con el uso anterior).
+ * - Quita los comodines de LIKE (% y _) y las comillas/barras invertidas,
+ *   que romperían el filtro de PostgREST.
+ * - Elimina duplicados y palabras vacías.
+ */
+function tokenizeSearch(search: string): string[] {
+  const tokens = search
+    .split(/[\s*]+/)
+    .map((t) => t.replace(/[%_"\\]/g, '').trim())
+    .filter(Boolean);
+  return [...new Set(tokens.map((t) => t.toLowerCase()))].slice(0, MAX_SEARCH_TOKENS);
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (applyCors(req, res)) return;
 
@@ -71,9 +90,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .order('no', { ascending: false })
         .range(offset, offset + limit - 1);
 
-      if (search) {
-        const safe = search.replace(/[%_]/g, '');
-        query = query.or(`description.ilike.%${safe}%,no.ilike.%${safe}%`);
+      // Búsqueda por palabras: el texto se trocea por espacios o asteriscos
+      // y CADA trozo debe aparecer (en cualquier orden y como parte de una
+      // palabra) en el código, la descripción, la categoría o el fabricante.
+      // Así "cint ais az", "azul cinta" o "aislante cinta az" encuentran
+      // "CINTA AISLANTE 20*19 AZUL". El "*" de antes sigue funcionando
+      // porque ahora actúa simplemente como separador.
+      for (const token of tokenizeSearch(search)) {
+        const pattern = `"*${token}*"`;
+        query = query.or(
+          [
+            `description.ilike.${pattern}`,
+            `no.ilike.${pattern}`,
+            `item_category_code.ilike.${pattern}`,
+            `manufacturer_code.ilike.${pattern}`,
+          ].join(','),
+        );
       }
 
       const { data, error } = await query;
