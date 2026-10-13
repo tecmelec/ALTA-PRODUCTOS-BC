@@ -8,6 +8,7 @@ import ExternalProducts from './components/ExternalProducts';
 import ReferenceInspection from './components/ReferenceInspection';
 import BulkCreate from './components/BulkCreate';
 import { useAuth } from './components/AuthGate';
+import CreatedProductDialog, { CreatedProductInfo } from './components/CreatedProductDialog';
 import { ITEM_CATEGORIES, MANUFACTURERS, UNITS_OF_MEASURE, filterHiddenCategories } from './constants';
 import { api, isApiConfigured } from './api';
 
@@ -62,6 +63,9 @@ const App: React.FC = () => {
   // "Crear Producto" disparen dos altas a la vez, cada una calculando su
   // propio "siguiente hueco libre" y creando así dos productos distintos.
   const isSavingProductRef = useRef(false);
+  // Producto recién creado: se muestra un aviso con su código para copiarlo.
+  const [createdProduct, setCreatedProduct] = useState<CreatedProductInfo | null>(null);
+  const closeCreatedDialog = useCallback(() => setCreatedProduct(null), []);
   const [isSyncing, setIsSyncing] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -176,10 +180,13 @@ const App: React.FC = () => {
             genProdPostingGroup: newProduct.genProdPostingGroup,
             vatProdPostingGroup: newProduct.vatProdPostingGroup,
           });
-          await loadSharedData();
-          if (created.dimensionWarning) {
-            alert(`Producto ${created.no} creado, pero atención:\n\n${created.dimensionWarning}\n\nRevísalo manualmente en Business Central.`);
-          }
+          setCreatedProduct({
+            no: created.no,
+            description: created.description ?? newProduct.description,
+            warning: created.dimensionWarning,
+          });
+          // El listado se refresca en segundo plano para que el aviso salga al instante.
+          void loadSharedData(searchTerm);
         } catch (err: any) {
           alert(`Error al crear el producto en Business Central: ${err.message}`);
           return;
@@ -425,6 +432,8 @@ const App: React.FC = () => {
           isSaving={isSavingProduct}
         />
       </Modal>
+
+      <CreatedProductDialog product={createdProduct} onClose={closeCreatedDialog} />
     </div>
   );
 };
