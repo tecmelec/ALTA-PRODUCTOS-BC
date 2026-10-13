@@ -390,7 +390,11 @@ const BulkCreate: React.FC<BulkCreateProps> = ({
         if (kept < r.description.trim().length) {
           notes.push(`La descripción se recortará a ${kept} caracteres para que quepa la referencia`);
         }
-        if (kept < 10) errors.push('La referencia es tan larga que no deja sitio a la descripción');
+        // Error solo si es la REFERENCIA la que no deja sitio (el hueco
+        // disponible para la descripción es mínimo), no si la descripción
+        // simplemente es corta.
+        const room = MAX_DESCRIPTION_LENGTH - ` REF. ${ref}`.length;
+        if (room < 10) errors.push('La referencia es tan larga que no deja sitio a la descripción');
       }
 
       result.set(r.id, {
