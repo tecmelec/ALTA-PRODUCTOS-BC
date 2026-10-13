@@ -1,6 +1,7 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { waitUntil } from '@vercel/functions';
 import { applyCors } from './_lib/cors';
+import { requireAuth } from './_lib/auth';
 import { runSyncChunk } from './_lib/syncCore';
 import { triggerNextChainLink } from './_lib/chain';
 
@@ -29,6 +30,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!secret || req.headers['x-cron-secret'] !== secret) {
       return res.status(401).json({ error: 'No autorizado' });
     }
+  } else if (!(await requireAuth(req, res))) {
+    // Las llamadas desde la app necesitan un usuario con sesión iniciada.
+    return;
   }
 
   const full = Boolean(req.body?.full);

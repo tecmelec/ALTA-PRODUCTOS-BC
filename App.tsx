@@ -7,6 +7,7 @@ import Settings from './components/Settings';
 import ExternalProducts from './components/ExternalProducts';
 import ReferenceInspection from './components/ReferenceInspection';
 import BulkCreate from './components/BulkCreate';
+import { useAuth } from './components/AuthGate';
 import { ITEM_CATEGORIES, MANUFACTURERS, UNITS_OF_MEASURE, filterHiddenCategories } from './constants';
 import { api, isApiConfigured } from './api';
 
@@ -33,6 +34,7 @@ const DEFAULT_SETTINGS: AppSettings = {
 
 const App: React.FC = () => {
   const apiConfigured = isApiConfigured();
+  const auth = useAuth();
   const [activeView, setActiveView] = useState<'products' | 'bc' | 'inspection' | 'bulk' | 'settings'>('products');
   const [currentUser, setCurrentUser] = useState<UserRole>(UserRole.ADMIN);
   const [products, setProducts] = useState<Product[]>(() => {
@@ -208,6 +210,18 @@ const App: React.FC = () => {
       <div className="bg-gray-800 text-white text-[10px] py-1 px-4 flex justify-between items-center uppercase tracking-widest font-bold">
         <span>SISTEMA DE GESTIÓN DE PRODUCTOS BC</span>
         <div className="flex items-center gap-3">
+          {auth.email && (
+            <>
+              <span className="normal-case tracking-normal font-medium text-gray-300">{auth.email}</span>
+              <button
+                onClick={() => auth.signOut()}
+                className="normal-case tracking-normal underline text-gray-300 hover:text-white"
+              >
+                Cerrar sesión
+              </button>
+              <span className="text-gray-600">|</span>
+            </>
+          )}
           <span>PERFIL ACTUAL:</span>
           <select 
             value={currentUser} 

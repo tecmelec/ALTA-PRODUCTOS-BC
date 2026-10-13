@@ -1,5 +1,6 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { applyCors } from './_lib/cors';
+import { requireAuth } from './_lib/auth';
 import { fetchODataEntities, createODataEntity, computeNextNo, requireEnv } from './_lib/bcClient';
 import { getSupabase, mapRowToProduct, ProductRow } from './_lib/supabaseClient';
 
@@ -75,6 +76,7 @@ function tokenizeSearch(search: string): string[] {
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (applyCors(req, res)) return;
+  if (!(await requireAuth(req, res))) return;
 
   try {
     if (req.method === 'GET') {

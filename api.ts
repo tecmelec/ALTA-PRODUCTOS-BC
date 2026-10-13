@@ -1,4 +1,5 @@
 import { Product, ProductType, Manufacturer, ItemCategory } from './types';
+import { getAccessToken, signOut } from './auth';
 
 // URL del backend (funciones serverless en Vercel). Se inyecta en build time
 // mediante la variable de entorno VITE_API_BASE_URL.
@@ -11,6 +12,22 @@ function apiUrl(path: string): string {
     );
   }
   return `${API_BASE_URL.replace(/\/$/, '')}${path}`;
+}
+
+/**
+ * fetch con el token de sesión del usuario: el backend rechaza cualquier
+ * petición sin una sesión válida del Portal Compras. Si responde 401 (sesión
+ * caducada o revocada), cerramos la sesión y la app vuelve a pedir login.
+ */
+async function authFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  const token = await getAccessToken();
+  const headers = new Headers(init.headers);
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  const res = await fetch(url, { ...init, headers });
+  if (res.status === 401) {
+    void signOut();
+  }
+  return res;
 }
 
 async function handle<T>(res: Response): Promise<T> {
@@ -47,7 +64,7 @@ export const api = {
     if (params?.limit) qs.set('limit', String(params.limit));
     if (params?.offset) qs.set('offset', String(params.offset));
     const suffix = qs.toString() ? `?${qs.toString()}` : '';
-    const res = await fetch(apiUrl(`/api/products${suffix}`));
+    const res = await authFetch(apiUrl(`/api/products${suffix}`));
     return handle<Product[]>(res);
   },
 
@@ -57,7 +74,7 @@ export const api = {
    * directamente en BC, reflejándolo también en la réplica de Supabase.
    */
   async createProduct(input: CreateProductInput & { type: ProductType }): Promise<Product & { dimensionWarning?: string }> {
-    const res = await fetch(apiUrl('/api/products'), {
+    const res = await authFetch(apiUrl('/api/products'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -77,22 +94,22 @@ export const api = {
   },
 
   async getManufacturers(): Promise<Manufacturer[]> {
-    const res = await fetch(apiUrl('/api/manufacturers'));
+    const res = await authFetch(apiUrl('/api/manufacturers'));
     return handle<Manufacturer[]>(res);
   },
 
   async getCategories(): Promise<ItemCategory[]> {
-    const res = await fetch(apiUrl('/api/categories'));
+    const res = await authFetch(apiUrl('/api/categories'));
     return handle<ItemCategory[]>(res);
   },
 
   async getUnits(): Promise<string[]> {
-    const res = await fetch(apiUrl('/api/units'));
+    const res = await authFetch(apiUrl('/api/units'));
     return handle<string[]>(res);
   },
 
   async addUnit(code: string): Promise<void> {
-    const res = await fetch(apiUrl('/api/units'), {
+    const res = await authFetch(apiUrl('/api/units'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ code }),
@@ -101,7 +118,7 @@ export const api = {
   },
 
   async deleteUnit(code: string): Promise<void> {
-    const res = await fetch(apiUrl(`/api/units/${encodeURIComponent(code)}`), { method: 'DELETE' });
+    const res = await authFetch(apiUrl(`/api/units/${encodeURIComponent(code)}`), { method: 'DELETE' });
     await handle(res);
   },
 
@@ -113,14 +130,14 @@ export const api = {
   async suggestDescription(
     manufacturerName: string,
     manufacturerRef: string
-  ): Promise<{ description: string; sources: { title: string; uri: string }[]; warning?: string }> {
+  ): Promise<{ description: string; sources: { title: string; uri: string }[] }> {
     const attempt = async () => {
-      const res = await fetch(apiUrl('/api/suggest-description'), {
+      const res = await authFetch(apiUrl('/api/suggest-description'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ manufacturerName, manufacturerRef }),
       });
-      return handle<{ description: string; sources: { title: string; uri: string }[]; warning?: string }>(res);
+      return handle<{ description: string; sources: { title: string; uri: string }[] }>(res);
     };
 
     try {
@@ -141,7 +158,7 @@ export const api = {
    * forzar una sincronización completa desde cero.
    */
   async syncProductsBatch(skip: number, full = false): Promise<{ done: boolean; nextSkip: number; syncedThisRun: number; incremental: boolean }> {
-    const res = await fetch(apiUrl('/api/sync-products'), {
+    const res = await authFetch(apiUrl('/api/sync-products'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ skip, full }),
