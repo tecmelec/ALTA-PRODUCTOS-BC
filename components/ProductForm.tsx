@@ -1,5 +1,6 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import SearchableSelect from './SearchableSelect';
 import { api, isApiConfigured } from '../api';
 import { 
   ProductType, 
@@ -74,6 +75,16 @@ const ProductForm: React.FC<ProductFormProps> = ({
   });
 
   const [manufacturerRef, setManufacturerRef] = useState('');
+
+  // Opciones para los desplegables con buscador de fabricante y categoría.
+  const manufacturerOptions = useMemo(
+    () => manufacturers.map(m => ({ value: m.code, code: m.code, label: m.name })),
+    [manufacturers]
+  );
+  const categoryOptions = useMemo(
+    () => categories.map(c => ({ value: c.code, code: c.code, label: c.description })),
+    [categories]
+  );
   const [descriptionTouched, setDescriptionTouched] = useState(false);
   const [categoryTouched, setCategoryTouched] = useState(false);
 
@@ -315,31 +326,27 @@ const ProductForm: React.FC<ProductFormProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="space-y-2">
             <label className="block text-sm font-semibold text-gray-600">Fabricante (Tabla 5720) {formData.type === ProductType.FABRICANTE && <span className="text-red-500">*</span>}</label>
-            <select
-              name="manufacturerCode"
+            <SearchableSelect
+              ariaLabel="Fabricante"
+              placeholder="Escribe código o nombre del fabricante…"
+              options={manufacturerOptions}
               value={formData.manufacturerCode || ''}
-              onChange={handleInputChange}
-              className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+              onChange={(code) => setFormData(prev => ({ ...prev, manufacturerCode: code }))}
               disabled={formData.type === ProductType.GENERICO}
-            >
-              <option value="">Seleccione fabricante...</option>
-              {manufacturers.map(m => <option key={m.code} value={m.code}>{m.code} - {m.name}</option>)}
-            </select>
+            />
           </div>
 
           <div className="space-y-2">
             <label className="block text-sm font-semibold text-gray-600">Categoría (Tabla 5722) <span className="text-red-500">*</span></label>
-            <select
-              name="itemCategoryCode"
+            <SearchableSelect
+              ariaLabel="Categoría"
+              placeholder="Escribe código o nombre de la categoría…"
+              options={categoryOptions}
               value={formData.itemCategoryCode || ''}
+              onChange={(code) => setFormData(prev => ({ ...prev, itemCategoryCode: code }))}
               onBlur={() => setCategoryTouched(true)}
-              onChange={handleInputChange}
-              className={`w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none ${categoryTouched && !isCategoryValid ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
-              required
-            >
-              <option value="">Seleccione categoría...</option>
-              {categories.map(c => <option key={c.code} value={c.code}>{c.code} - {c.description}</option>)}
-            </select>
+              invalid={categoryTouched && !isCategoryValid}
+            />
             {categoryTouched && !isCategoryValid && (
               <p className="text-[10px] text-red-500 font-bold">La selección de categoría es obligatoria.</p>
             )}
