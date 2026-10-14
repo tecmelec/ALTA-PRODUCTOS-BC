@@ -2,7 +2,7 @@ import { VercelRequest, VercelResponse } from '@vercel/node';
 import { waitUntil } from '@vercel/functions';
 import { applyCors } from './_lib/cors';
 import { requireAuth } from './_lib/auth';
-import { runSyncChunk } from './_lib/syncCore';
+import { runSyncChunk, getSyncStatus, TIME_BUDGET_MS, CRON_TIME_BUDGET_MS } from './_lib/syncCore';
 import { triggerNextChainLink } from './_lib/chain';
 
 /**
@@ -16,12 +16,23 @@ import { triggerNextChainLink } from './_lib/chain';
  * Es "resumible": si no da tiempo a terminar en una invocación, devuelve
  * `done: false` y un `nextSkip`. La app llama de nuevo con ese valor.
  *
- * `chain: true` es de uso interno (solo lo usa el cron semanal para
+ * `chain: true` es de uso interno (solo lo usa el cron nocturno para
  * encadenar automáticamente varias invocaciones sin intervención manual);
  * requiere la cabecera `x-cron-secret` correcta.
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (applyCors(req, res)) return;
+
+  // GET: estado de la sincronización (cuándo terminó la última completa).
+  if (req.method === 'GET') {
+    if (!(await requireAuth(req, res))) return;
+    try {
+      return res.status(200).json(await getSyncStatus());
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message ?? 'Error interno' });
+    }
+  }
+
   if (req.method !== 'POST') return res.status(405).json({ error: 'Método no permitido' });
 
   const isChainCall = Boolean(req.body?.chain);
@@ -39,7 +50,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const skip = Number(req.body?.skip) || 0;
 
   try {
-    const result = await runSyncChunk(skip, full);
+    // Las tandas encadenadas del cron trabajan en tramos largos; las de la
+    // app, en tramos cortos para ir mostrando el progreso.
+    const result = await runSyncChunk(skip, full, isChainCall ? CRON_TIME_BUDGET_MS : TIME_BUDGET_MS);
 
     // Si esta llamada viene del cron y aún queda trabajo, encadenamos
     // automáticamente la siguiente tanda en segundo plano.

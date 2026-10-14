@@ -1,27 +1,37 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { waitUntil } from '@vercel/functions';
-import { runSyncChunk } from './_lib/syncCore';
+import { runSyncChunk, CRON_TIME_BUDGET_MS } from './_lib/syncCore';
 import { triggerNextChainLink } from './_lib/chain';
 
 /**
  * Punto de entrada del Cron Job de Vercel (ver vercel.json → "crons").
- * Vercel invoca esta ruta automáticamente cada semana y añade la cabecera
- * `Authorization: Bearer <CRON_SECRET>` si la variable CRON_SECRET está
- * configurada — así verificamos que la llamada es legítima.
+ * Vercel lo invoca TODOS LOS DÍAS a las 03:00 UTC (05:00 en horario de
+ * verano de Madrid, 04:00 en invierno) con la cabecera
+ * `Authorization: Bearer <CRON_SECRET>`.
  *
- * Lanza una sincronización COMPLETA y se encadena a sí misma (vía
- * /api/sync-products con chain=true) hasta terminar todo el catálogo,
- * sin que nadie tenga que dejar el navegador abierto.
+ * Lanza una sincronización COMPLETA: vuelve a descargar todo el catálogo
+ * y, al terminar, elimina de la réplica los artículos que ya no existen en
+ * Business Central (borrados o renumerados). Es lo mismo que el botón
+ * "forzar completa" de la app.
+ *
+ * Cada invocación trabaja ~22 s; si el catálogo no cabe, se encadena a sí
+ * misma (vía /api/sync-products con chain=true) hasta terminar.
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const secret = process.env.CRON_SECRET;
-  const authHeader = req.headers.authorization;
-  if (secret && authHeader !== `Bearer ${secret}`) {
+  if (!secret) {
+    // Sin secreto no se puede verificar la llamada ni encadenar tandas, y
+    // la sincronización se quedaría a medias sin borrar nada.
+    console.error('CRON_SECRET no está configurado en Vercel: la sincronización nocturna no puede ejecutarse.');
+    return res.status(500).json({ error: 'Falta configurar CRON_SECRET en Vercel' });
+  }
+  if (req.headers.authorization !== `Bearer ${secret}`) {
     return res.status(401).json({ error: 'No autorizado' });
   }
 
   try {
-    const result = await runSyncChunk(0, true);
+    const result = await runSyncChunk(0, true, CRON_TIME_BUDGET_MS);
+    console.log(`Cron: primera tanda de sincronización completa, ${result.syncedThisRun} artículos, done=${result.done}`);
 
     if (!result.done) {
       waitUntil(triggerNextChainLink(req, result.nextSkip, true));

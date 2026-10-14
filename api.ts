@@ -152,6 +152,12 @@ export const api = {
     }
   },
 
+  /** Estado de la sincronización: cuándo terminó la última completa (cron nocturno o manual). */
+  async getSyncStatus(): Promise<{ lastCutoff: string | null; fullSyncStartedAt: string | null; fullSyncFinishedAt: string | null }> {
+    const res = await authFetch(apiUrl('/api/sync-products'));
+    return handle(res);
+  },
+
   /**
    * Sincroniza un lote de artículos desde Business Central hacia Supabase.
    * Por defecto es incremental (solo lo que cambió); pasa `full: true` para

@@ -103,15 +103,15 @@ Al dar de alta un producto por fabricante, el botón "Sugerir" busca la ficha de
 
 Ambas claves viven solo en el backend — nunca se envían al navegador.
 
-### 6. Sincronización completa automática (semanal)
+### 6. Sincronización completa automática (diaria)
 
-Además de los botones manuales, hay un Cron Job de Vercel que ejecuta una sincronización completa (con limpieza de borrados/renumeraciones) automáticamente **cada domingo a las 03:00 UTC**. Ya está definido en `backend-vercel/vercel.json` — solo falta un secreto para protegerlo:
+Además de los botones manuales, hay un Cron Job de Vercel que ejecuta una sincronización completa (con limpieza de borrados/renumeraciones) automáticamente **todos los días a las 03:00 UTC** (05:00 en verano / 04:00 en invierno, hora de Madrid). Ya está definido en `backend-vercel/vercel.json` — solo falta un secreto para protegerlo:
 
 1. Genera una cadena aleatoria larga (por ejemplo con `openssl rand -hex 32`, o cualquier generador de contraseñas).
 2. En Vercel → Environment Variables, añade `CRON_SECRET` con ese valor.
 3. Redespliega. Vercel detecta automáticamente el bloque `crons` de `vercel.json` y añade el Cron Job — puedes verlo en tu proyecto → pestaña **"Cron Jobs"**, y disparar una ejecución manual desde ahí para probarlo.
 
-Puedes seguir usando el botón "forzar completa" de la app en cualquier momento sin esperar al domingo; ambos caminos limpian igual los borrados/renumeraciones.
+Puedes seguir usando el botón "forzar completa" de la app en cualquier momento sin esperar a la noche; ambos caminos limpian igual los borrados/renumeraciones. Junto a los botones, la app muestra la fecha de la **última sincronización completa terminada** (en ámbar si tiene más de 36 h: señal de que el cron está fallando). Para guardar esa fecha hace falta la columna `full_sync_finished_at` en `sync_meta` (ver `supabase-schema.sql`).
 
 ## Desarrollo local
 

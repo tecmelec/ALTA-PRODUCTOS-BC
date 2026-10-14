@@ -71,6 +71,18 @@ const App: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isFullSyncing, setIsFullSyncing] = useState(false);
   const [fullSyncProgress, setFullSyncProgress] = useState(0);
+  // Última sincronización completa terminada (la nocturna o la manual).
+  const [lastFullSync, setLastFullSync] = useState<string | null | undefined>(undefined);
+  const refreshSyncStatus = useCallback(async () => {
+    if (!apiConfigured) return;
+    try {
+      const status = await api.getSyncStatus();
+      setLastFullSync(status.fullSyncFinishedAt);
+    } catch {
+      setLastFullSync(undefined);
+    }
+  }, [apiConfigured]);
+  useEffect(() => { void refreshSyncStatus(); }, [refreshSyncStatus]);
 
   // Carga inicial y refresco de datos compartidos (productos desde la réplica
   // en Supabase; fabricantes/categorías en vivo desde Business Central)
@@ -140,6 +152,7 @@ const App: React.FC = () => {
     try {
       const total = await api.syncAllProducts((count) => setFullSyncProgress(count), full);
       await loadSharedData(searchTerm);
+      void refreshSyncStatus();
       alert(
         full
           ? `Sincronización completa: ${total} artículos actualizados desde Business Central.`
@@ -337,6 +350,17 @@ const App: React.FC = () => {
                     >
                       forzar completa
                     </button>
+                    {lastFullSync !== undefined && (
+                      <span
+                        className={`text-gray-400 ${lastFullSync && Date.now() - new Date(lastFullSync).getTime() > 36 * 3600 * 1000 ? 'text-amber-600 font-bold' : ''}`}
+                        title="La sincronización completa se ejecuta sola cada noche y elimina de la app los artículos borrados en BC"
+                      >
+                        Última completa:{' '}
+                        {lastFullSync
+                          ? new Date(lastFullSync).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+                          : 'sin registrar'}
+                      </span>
+                    )}
                   </div>
                 )}
               </div>

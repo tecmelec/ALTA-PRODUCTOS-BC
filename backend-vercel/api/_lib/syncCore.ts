@@ -18,7 +18,14 @@ const SELECT_FIELDS = [
 ].join(',');
 
 const PAGE_SIZE = 500;
-const TIME_BUDGET_MS = 8000; // dejamos margen bajo el límite de 10s de Vercel
+// Tiempo por invocación cuando lo lanza la app (tramos cortos para poder
+// mostrar el progreso en pantalla).
+export const TIME_BUDGET_MS = 8000;
+// Tiempo por invocación cuando lo lanza el cron nocturno: tramos más largos
+// para necesitar menos enlaces de la cadena. Cada invocación, además de su
+// tramo, espera la respuesta de la siguiente (otro tramo igual), y todo
+// debe caber en maxDuration (60 s, vercel.json): 22 + 22 + margen < 60.
+export const CRON_TIME_BUDGET_MS = 22000;
 // Margen de solapamiento al filtrar por fecha: Last_Date_Modified solo tiene
 // precisión de día, así que reprocesamos un par de días atrás por seguridad
 // (los upserts son idempotentes, no hace daño repetir).
@@ -74,6 +81,34 @@ async function finishSync(supabase: ReturnType<typeof getSupabase>, wasFullSync:
   }
 
   await supabase.from('sync_meta').upsert({ id: 'products', last_cutoff: toODataDate(new Date()) });
+
+  if (wasFullSync) {
+    // Fecha de la última sincronización completa TERMINADA (se muestra en la
+    // app). Va aparte: si la columna aún no existe en Supabase, no debe
+    // impedir guardar last_cutoff.
+    const { error } = await supabase
+      .from('sync_meta')
+      .update({ full_sync_finished_at: new Date().toISOString() })
+      .eq('id', 'products');
+    if (error) console.error('No se pudo guardar full_sync_finished_at:', error.message);
+  }
+}
+
+export interface SyncStatus {
+  lastCutoff: string | null;
+  fullSyncStartedAt: string | null;
+  fullSyncFinishedAt: string | null;
+}
+
+export async function getSyncStatus(): Promise<SyncStatus> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.from('sync_meta').select('*').eq('id', 'products').single();
+  if (error) throw new Error(error.message);
+  return {
+    lastCutoff: data?.last_cutoff ?? null,
+    fullSyncStartedAt: data?.full_sync_started_at ?? null,
+    fullSyncFinishedAt: data?.full_sync_finished_at ?? null,
+  };
 }
 
 /**
@@ -84,7 +119,11 @@ async function finishSync(supabase: ReturnType<typeof getSupabase>, wasFullSync:
  * `full: true` ignora el filtro de fecha y trae el catálogo completo,
  * limpiando al final lo que ya no exista en BC (borrados/renumeraciones).
  */
-export async function runSyncChunk(skip: number, full: boolean): Promise<SyncChunkResult> {
+export async function runSyncChunk(
+  skip: number,
+  full: boolean,
+  timeBudgetMs: number = TIME_BUDGET_MS,
+): Promise<SyncChunkResult> {
   const start = Date.now();
   const itemsUrl = requireEnv('BC_ITEMS_ENTITY_URL');
   const supabase = getSupabase();
@@ -103,7 +142,7 @@ export async function runSyncChunk(skip: number, full: boolean): Promise<SyncChu
     await supabase.from('sync_meta').upsert({ id: 'products', full_sync_started_at: new Date().toISOString() });
   }
 
-  while (Date.now() - start < TIME_BUDGET_MS) {
+  while (Date.now() - start < timeBudgetMs) {
     const query = `?$select=${SELECT_FIELDS}&$orderby=No&$top=${PAGE_SIZE}&$skip=${skip}${dateFilter}`;
     const page = await fetchODataEntities(itemsUrl, query);
 

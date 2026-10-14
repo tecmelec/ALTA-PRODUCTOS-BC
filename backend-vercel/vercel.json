@@ -7,7 +7,7 @@
   "crons": [
     {
       "path": "/api/cron-full-sync",
-      "schedule": "0 3 * * 0"
+      "schedule": "0 3 * * *"
     }
   ]
 }

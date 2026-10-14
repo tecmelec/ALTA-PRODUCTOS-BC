@@ -3,7 +3,7 @@ import { VercelRequest } from '@vercel/node';
 /**
  * Dispara la siguiente tanda de la sincronización llamándose a sí mismo,
  * sin que nadie tenga que esperar con el navegador abierto. Se usa
- * únicamente desde el cron semanal para completar catálogos grandes que
+ * únicamente desde el cron nocturno para completar catálogos grandes que
  * no caben en una sola invocación de 10s.
  */
 export async function triggerNextChainLink(req: VercelRequest, nextSkip: number, full: boolean): Promise<void> {
@@ -15,11 +15,16 @@ export async function triggerNextChainLink(req: VercelRequest, nextSkip: number,
   const url = `${proto}://${host}/api/sync-products`;
 
   try {
-    await fetch(url, {
+    const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-cron-secret': secret },
       body: JSON.stringify({ skip: nextSkip, full, chain: true }),
     });
+    if (!res.ok) {
+      // Si la siguiente tanda falla, la sincronización completa no termina
+      // y no se borran los artículos eliminados en BC: que quede en el log.
+      console.error(`La tanda de sincronización desde ${nextSkip} falló: HTTP ${res.status} ${await res.text()}`);
+    }
   } catch (err) {
     console.error('No se pudo encadenar la siguiente tanda de sincronización:', err);
   }

@@ -45,6 +45,7 @@ values ('products', null)
 on conflict (id) do nothing;
 
 alter table sync_meta add column if not exists full_sync_started_at timestamptz;
+alter table sync_meta add column if not exists full_sync_finished_at timestamptz;
 
 -- Unidades de medida: se gestionan dentro de la app (no vienen de BC),
 -- pero se comparten entre todos los usuarios.
