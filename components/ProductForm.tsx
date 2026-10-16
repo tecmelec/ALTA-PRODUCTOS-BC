@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import SearchableSelect from './SearchableSelect';
+import { stripAccents } from '../textUtils';
 import { api, isApiConfigured } from '../api';
 import { 
   ProductType, 
@@ -166,7 +167,8 @@ const ProductForm: React.FC<ProductFormProps> = ({
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     let processedValue: any = value;
-    if (name === 'description') processedValue = value.toUpperCase();
+    // Sin tildes: ENVÍO → ENVIO (la Ñ se conserva).
+    if (name === 'description') processedValue = stripAccents(value.toUpperCase());
     if (name === 'unitPrice' || name === 'unitCost') processedValue = parseFloat(value) || 0;
     setFormData(prev => ({ ...prev, [name]: processedValue }));
   };
@@ -196,7 +198,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
           if (lastSpace > 0) suggested = suggested.slice(0, lastSpace);
           suggested = suggested.trim();
         }
-        setFormData(prev => ({ ...prev, description: suggested }));
+        setFormData(prev => ({ ...prev, description: stripAccents(suggested) }));
       } else if (result.warning) {
         // La IA no devolvió una descripción aprovechable: lo avisamos en
         // vez de dejar el campo vacío sin explicación.
@@ -359,7 +361,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
                 <input
                   type="text"
                   value={manufacturerRef}
-                  onChange={(e) => setManufacturerRef(e.target.value.toUpperCase())}
+                  onChange={(e) => setManufacturerRef(stripAccents(e.target.value.toUpperCase()))}
                   placeholder="Ej: REF-12345"
                   className={`w-full p-2 border rounded focus:ring-2 outline-none transition-colors ${isDuplicateRef ? 'border-red-500 bg-red-50 focus:ring-red-200' : 'border-gray-300 focus:ring-blue-500'}`}
                   required

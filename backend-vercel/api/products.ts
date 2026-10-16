@@ -1,6 +1,7 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { applyCors } from './_lib/cors';
 import { requireAuth } from './_lib/auth';
+import { stripAccents } from './_lib/textUtils';
 import { fetchODataEntities, createODataEntity, computeNextNo, requireEnv } from './_lib/bcClient';
 import { getSupabase, mapRowToProduct, ProductRow } from './_lib/supabaseClient';
 
@@ -140,6 +141,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!body.description) {
         return res.status(400).json({ error: 'La descripción es obligatoria' });
       }
+      // Las descripciones se dan de alta siempre sin tildes (ENVÍO → ENVIO),
+      // venga de donde venga la petición (alta individual, masiva, IA…).
+      body.description = stripAccents(body.description);
 
       const prefix = body.isGeneric
         ? `G${body.itemCategoryCode.substring(0, 3).toUpperCase()}`

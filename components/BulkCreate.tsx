@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api';
 import { findProductsByRef } from '../referenceSearch';
+import { stripAccents } from '../textUtils';
 import { ExternalProduct, ItemCategory, Manufacturer, ProductType } from '../types';
 
 interface BulkCreateProps {
@@ -156,8 +157,8 @@ const newRow = (values: Partial<Record<Field, string>>): Row => ({
   id: nextRowId++,
   manufacturer: clean(values.manufacturer),
   category: clean(values.category),
-  reference: clean(values.reference),
-  description: clean(values.description),
+  reference: stripAccents(clean(values.reference)),
+  description: stripAccents(clean(values.description)),
   unit: clean(values.unit),
   create: { kind: 'idle' },
 });
@@ -259,7 +260,10 @@ const BulkCreate: React.FC<BulkCreateProps> = ({
   };
 
   const updateCell = (id: number, field: Field, value: string) => {
-    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, [field]: value.toUpperCase() } : r)));
+    let next = value.toUpperCase();
+    // Descripción y referencia sin tildes (ENVÍO → ENVIO); la Ñ se conserva.
+    if (field === 'description' || field === 'reference') next = stripAccents(next);
+    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, [field]: next } : r)));
   };
 
   const removeRow = (id: number) => setRows((prev) => prev.filter((r) => r.id !== id));
