@@ -58,9 +58,10 @@ export interface CreateProductInput {
 
 export const api = {
   /** Lee los productos desde la réplica en Supabase (rápida, con búsqueda). */
-  async getProducts(params?: { search?: string; limit?: number; offset?: number }): Promise<Product[]> {
+  async getProducts(params?: { search?: string; limit?: number; offset?: number; includeBlocked?: boolean }): Promise<Product[]> {
     const qs = new URLSearchParams();
     if (params?.search) qs.set('search', params.search);
+    if (params?.includeBlocked) qs.set('includeBlocked', '1');
     if (params?.limit) qs.set('limit', String(params.limit));
     if (params?.offset) qs.set('offset', String(params.offset));
     const suffix = qs.toString() ? `?${qs.toString()}` : '';

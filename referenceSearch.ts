@@ -11,6 +11,8 @@ export interface ReferenceMatch {
   description: string;
   /** true si la descripción contiene "REF. <referencia>" (formato de la app). */
   exact: boolean;
+  /** Artículo bloqueado en BC (no se ve en la app, pero la referencia existe). */
+  blocked: boolean;
 }
 
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -31,7 +33,7 @@ const looseRefPattern = (ref: string) =>
 
 function classify(
   ref: string,
-  candidates: { no: string; description: string; manufacturerRef?: string }[],
+  candidates: { no: string; description: string; manufacturerRef?: string; blocked?: boolean }[],
   includeLoose: boolean,
 ): ReferenceMatch[] {
   const exactRe = refPattern(ref);
@@ -44,7 +46,7 @@ function classify(
     const loose = !exact && includeLoose && looseRe.test(p.description);
     if (!exact && !loose) continue;
     const prev = byNo.get(p.no);
-    if (!prev || (exact && !prev.exact)) byNo.set(p.no, { no: p.no, description: p.description, exact });
+    if (!prev || (exact && !prev.exact)) byNo.set(p.no, { no: p.no, description: p.description, exact, blocked: p.blocked === true });
   }
 
   // Primero las coincidencias exactas ("REF. X").
@@ -72,12 +74,13 @@ export async function findProductsByRef(
   if (!ref) return [];
   const includeLoose = options.includeLoose ?? false;
 
-  let candidates: { no: string; description: string; manufacturerRef?: string }[] = [];
+  let candidates: { no: string; description: string; manufacturerRef?: string; blocked?: boolean }[] = [];
   if (options.apiConfigured) {
     // El buscador del backend exige que aparezcan todas las palabras, así
     // que basta con buscar la referencia; luego afinamos aquí.
     const search = ref.replace(/[%_"\\]/g, ' ');
-    candidates = await api.getProducts({ search, limit: 1000 });
+    // Incluye los bloqueados: su referencia sigue existiendo en BC.
+    candidates = await api.getProducts({ search, limit: 1000, includeBlocked: true });
   } else {
     candidates = options.localProducts ?? [];
   }

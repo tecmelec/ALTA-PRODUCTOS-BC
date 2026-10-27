@@ -27,6 +27,8 @@ export interface ProductRow {
   vat_prod_posting_group: string | null;
   manufacturer_code: string | null;
   item_category_code: string | null;
+  /** Bloqueado en Business Central (no se muestra en la app). */
+  blocked?: boolean | null;
   synced_at?: string;
 }
 
@@ -42,5 +44,6 @@ export function mapRowToProduct(row: ProductRow) {
     vatProdPostingGroup: row.vat_prod_posting_group ?? '',
     manufacturerCode: row.manufacturer_code ?? '',
     itemCategoryCode: row.item_category_code ?? '',
+    blocked: row.blocked === true,
   };
 }

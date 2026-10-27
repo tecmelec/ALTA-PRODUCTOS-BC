@@ -15,7 +15,19 @@ const SELECT_FIELDS = [
   'Manufacturer_Code',
   'Item_Category_Code',
   'Last_Date_Modified',
-].join(',');
+];
+// Campo "Bloqueado" de la ficha del producto. Se pide aparte porque, si la
+// página de BC no lo expone, la consulta fallaría entera: en ese caso se
+// sigue sincronizando sin él (y se avisa en el log).
+const BLOCKED_FIELD = 'Blocked';
+let bcExposesBlocked = true;
+// Igual con la columna "blocked" en Supabase: si aún no se ha creado, se
+// guarda el resto de campos sin ella.
+let supabaseHasBlocked = true;
+
+function selectFields(): string {
+  return (bcExposesBlocked ? [...SELECT_FIELDS, BLOCKED_FIELD] : SELECT_FIELDS).join(',');
+}
 
 const PAGE_SIZE = 500;
 // Tiempo por invocación cuando lo lanza la app (tramos cortos para poder
@@ -50,6 +62,7 @@ function itemToRow(item: any): ProductRow {
     vat_prod_posting_group: item.VAT_Prod_Posting_Group || null,
     manufacturer_code: item.Manufacturer_Code || null,
     item_category_code: item.Item_Category_Code || null,
+    blocked: item.Blocked === true,
     synced_at: new Date().toISOString(),
   };
 }
@@ -143,16 +156,34 @@ export async function runSyncChunk(
   }
 
   while (Date.now() - start < timeBudgetMs) {
-    const query = `?$select=${SELECT_FIELDS}&$orderby=No&$top=${PAGE_SIZE}&$skip=${skip}${dateFilter}`;
-    const page = await fetchODataEntities(itemsUrl, query);
+    const buildQuery = () => `?$select=${selectFields()}&$orderby=No&$top=${PAGE_SIZE}&$skip=${skip}${dateFilter}`;
+    let page: any[];
+    try {
+      page = await fetchODataEntities(itemsUrl, buildQuery());
+    } catch (err: any) {
+      if (bcExposesBlocked && /blocked/i.test(String(err?.message))) {
+        console.error('La página de BC no expone el campo "Blocked": se sincroniza sin él y los bloqueados seguirán visibles.', err?.message);
+        bcExposesBlocked = false;
+        page = await fetchODataEntities(itemsUrl, buildQuery());
+      } else {
+        throw err;
+      }
+    }
 
     if (page.length === 0) {
       await finishSync(supabase, full);
       return { done: true, nextSkip: skip, syncedThisRun, incremental: !full };
     }
 
-    const rows = page.map(itemToRow);
-    const { error } = await supabase.from('products').upsert(rows);
+    let rows: Record<string, any>[] = page.map(itemToRow);
+    if (!bcExposesBlocked || !supabaseHasBlocked) rows = rows.map(({ blocked, ...rest }) => rest);
+    let { error } = await supabase.from('products').upsert(rows);
+    if (error && supabaseHasBlocked && /blocked/i.test(error.message)) {
+      console.error('Falta la columna "blocked" en la tabla products de Supabase (ver supabase-schema.sql). Se sincroniza sin ella.');
+      supabaseHasBlocked = false;
+      rows = rows.map(({ blocked, ...rest }) => rest);
+      ({ error } = await supabase.from('products').upsert(rows));
+    }
     if (error) throw new Error(`Error escribiendo en Supabase: ${error.message}`);
 
     skip += page.length;

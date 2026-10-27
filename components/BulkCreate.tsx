@@ -305,7 +305,7 @@ const BulkCreate: React.FC<BulkCreateProps> = ({
           let result: RefCheck;
           try {
             const matches = await findProductsByRef(ref, { apiConfigured, externalProducts });
-            const codes = matches.map((m) => m.no);
+            const codes = matches.map((m) => (m.blocked ? `${m.no} (bloqueado)` : m.no));
             result = codes.length > 0 ? { kind: 'exists', codes } : { kind: 'free' };
           } catch (err: any) {
             result = { kind: 'error', message: err?.message ?? 'Error al comprobar' };

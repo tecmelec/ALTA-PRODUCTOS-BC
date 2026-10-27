@@ -158,6 +158,9 @@ const ReferenceInspection: React.FC<ReferenceInspectionProps> = ({ products, ext
                             <div key={m.no}>
                               <p className="text-blue-600 font-bold text-xs">
                                 {m.no}
+                                {m.blocked && (
+                                  <span className="ml-2 text-[10px] font-black uppercase bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded">Bloqueado</span>
+                                )}
                                 {!m.exact && (
                                   <span className="ml-2 font-normal text-gray-400" title='La referencia aparece en la descripción, pero sin "REF." delante'>
                                     (sin «REF.»)

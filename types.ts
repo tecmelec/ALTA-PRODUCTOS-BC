@@ -53,6 +53,8 @@ export interface Product {
   dimensionValueCode: string;
   valuePosting: string;
   manufacturerRef?: string;
+  /** Bloqueado en Business Central. */
+  blocked?: boolean;
 }
 
 export enum UserRole {

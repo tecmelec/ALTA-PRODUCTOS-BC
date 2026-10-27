@@ -107,7 +107,8 @@ const ProductForm: React.FC<ProductFormProps> = ({
     setIsCheckingRef(true);
     const timeout = setTimeout(async () => {
       try {
-        const results = await api.getProducts({ search: manufacturerRef.trim(), limit: 50 });
+        // Incluye bloqueados: la referencia sigue existiendo en BC.
+        const results = await api.getProducts({ search: manufacturerRef.trim(), limit: 50, includeBlocked: true });
         if (!cancelled) setRefSearchResults(results);
       } catch {
         // Si falla la búsqueda en vivo, no bloqueamos el flujo: se mantiene

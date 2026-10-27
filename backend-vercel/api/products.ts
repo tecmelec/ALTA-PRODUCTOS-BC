@@ -86,32 +86,45 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
       const limit = Math.min(Number(req.query.limit) || 200, 1000);
       const offset = Number(req.query.offset) || 0;
+      // Por defecto NO se devuelven los artículos bloqueados en BC. Las
+      // comprobaciones de referencias duplicadas sí los piden
+      // (includeBlocked=1), porque la referencia existe igualmente en BC.
+      const includeBlocked = req.query.includeBlocked === '1';
 
-      let query = supabase
-        .from('products')
-        .select('*')
-        .order('no', { ascending: false })
-        .range(offset, offset + limit - 1);
+      const buildQuery = (filterBlocked: boolean) => {
+        let query = supabase
+          .from('products')
+          .select('*')
+          .order('no', { ascending: false })
+          .range(offset, offset + limit - 1);
+        if (filterBlocked) query = query.or('blocked.is.null,blocked.eq.false');
 
-      // Búsqueda por palabras: el texto se trocea por espacios o asteriscos
-      // y CADA trozo debe aparecer (en cualquier orden y como parte de una
-      // palabra) en el código, la descripción, la categoría o el fabricante.
-      // Así "cint ais az", "azul cinta" o "aislante cinta az" encuentran
-      // "CINTA AISLANTE 20*19 AZUL". El "*" de antes sigue funcionando
-      // porque ahora actúa simplemente como separador.
-      for (const token of tokenizeSearch(search)) {
-        const pattern = `"*${token}*"`;
-        query = query.or(
-          [
-            `description.ilike.${pattern}`,
-            `no.ilike.${pattern}`,
-            `item_category_code.ilike.${pattern}`,
-            `manufacturer_code.ilike.${pattern}`,
-          ].join(','),
-        );
+        // Búsqueda por palabras: el texto se trocea por espacios o asteriscos
+        // y CADA trozo debe aparecer (en cualquier orden y como parte de una
+        // palabra) en el código, la descripción, la categoría o el fabricante.
+        // Así "cint ais az", "azul cinta" o "aislante cinta az" encuentran
+        // "CINTA AISLANTE 20*19 AZUL". El "*" de antes sigue funcionando
+        // porque ahora actúa simplemente como separador.
+        for (const token of tokenizeSearch(search)) {
+          const pattern = `"*${token}*"`;
+          query = query.or(
+            [
+              `description.ilike.${pattern}`,
+              `no.ilike.${pattern}`,
+              `item_category_code.ilike.${pattern}`,
+              `manufacturer_code.ilike.${pattern}`,
+            ].join(','),
+          );
+        }
+        return query;
+      };
+
+      let { data, error } = await buildQuery(!includeBlocked);
+      if (error && !includeBlocked && /blocked/i.test(error.message)) {
+        // La columna "blocked" aún no existe en Supabase: se lista todo.
+        console.error('Falta la columna "blocked" en products (ver supabase-schema.sql).');
+        ({ data, error } = await buildQuery(false));
       }
-
-      const { data, error } = await query;
       if (error) throw new Error(`Error consultando Supabase: ${error.message}`);
 
       return res.status(200).json((data ?? []).map((row) => mapRowToProduct(row as ProductRow)));

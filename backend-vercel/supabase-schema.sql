@@ -56,3 +56,6 @@ alter table units_of_measure enable row level security;
 
 insert into units_of_measure (code) values ('UD'), ('METRO'), ('KG'), ('LITRO'), ('CAJA')
 on conflict (code) do nothing;
+
+-- Artículos bloqueados en BC: no se muestran en la app.
+alter table products add column if not exists blocked boolean not null default false;
